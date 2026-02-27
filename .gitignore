@@ -5,3 +5,7 @@ dist-server/
 .env.local
 .DS_Store
 *.log
+
+# Generated XML artifacts — stored locally, not committed
+data/canonical-samples/*.xml
+data/fhir-samples/*.xml

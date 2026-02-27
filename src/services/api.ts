@@ -3,10 +3,13 @@ const BASE = '/api'
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export interface Build {
-  target: string
-  canonical: string
-  description?: string
-  version?: string
+  canonical_name: string
+  root_element_name: string
+  schema_file_name: string
+  output_file_name: string
+  transform_file: string | null
+  provider_directory_child?: string | null
+  fhir_profile?: string | null
 }
 
 export interface SampleFile {
@@ -94,25 +97,34 @@ export async function getBuilds(): Promise<Build[]> {
 
 // ── Samples ──────────────────────────────────────────────────────────────────
 
-/** GET /samples/canonical — list all canonical sample filenames */
+/** GET /samples/canonical — list all canonical sample files with metadata */
 export async function getCanonicalSamples(): Promise<SampleFile[]> {
   const data = await apiFetch<string[] | SampleFile[]>('/samples/canonical')
-  // Normalise: API may return plain string array or object array
-  return (data as (string | SampleFile)[]).map((item) =>
-    typeof item === 'string'
-      ? { filename: item, type: 'canonical' as const, target: item.replace(/-sample\.xml$/, '') }
-      : { ...item, type: 'canonical' as const }
-  )
+  return (data as (string | SampleFile)[]).map((item) => {
+    if (typeof item === 'string') {
+      return { filename: item, type: 'canonical' as const, target: item.replace(/-sample.*\.xml$/, '') }
+    }
+    return {
+      ...item,
+      type: 'canonical' as const,
+      target: item.target ?? item.filename.replace(/-sample.*\.xml$/, ''),
+    }
+  })
 }
 
-/** GET /samples/fhir — list all FHIR sample filenames */
+/** GET /samples/fhir — list all FHIR sample files with metadata */
 export async function getFhirSamples(): Promise<SampleFile[]> {
   const data = await apiFetch<string[] | SampleFile[]>('/samples/fhir')
-  return (data as (string | SampleFile)[]).map((item) =>
-    typeof item === 'string'
-      ? { filename: item, type: 'fhir' as const, target: item.replace(/-fhir\.xml$/, '') }
-      : { ...item, type: 'fhir' as const }
-  )
+  return (data as (string | SampleFile)[]).map((item) => {
+    if (typeof item === 'string') {
+      return { filename: item, type: 'fhir' as const, target: item.replace(/-fhir.*\.xml$/, '') }
+    }
+    return {
+      ...item,
+      type: 'fhir' as const,
+      target: item.target ?? item.filename.replace(/-fhir.*\.xml$/, ''),
+    }
+  })
 }
 
 /** POST /samples/generate/{target} — generate a canonical sample */
@@ -176,6 +188,34 @@ export async function getTransforms(): Promise<TransformFile[]> {
 /** GET /transforms/{filename} — download a transform file */
 export async function downloadTransform(filename: string): Promise<void> {
   return downloadFile(`/transforms/${filename}`, filename)
+}
+
+// ── Custom XSD upload ─────────────────────────────────────────────────────────
+
+/**
+ * POST /samples/generate/custom — upload an XSD and get back a generated sample XML download.
+ * Uses FormData (not JSON) so we omit the Content-Type header and let the browser set it.
+ */
+export async function uploadCustomXsd(file: File, rootElement: string): Promise<void> {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('root_element', rootElement)
+
+  const res = await fetch(`${BASE}/samples/generate/custom`, { method: 'POST', body: form })
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(`Upload failed ${res.status}: ${text}`)
+  }
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  const cd = res.headers.get('content-disposition')
+  a.download = cd?.match(/filename="?([^";\n]+)"?/)?.[1] ?? `custom-sample.xml`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
 
 // ── Health check ─────────────────────────────────────────────────────────────

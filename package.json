@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build",
     "preview": "vite preview",
-    "serve": "tsx server/index.ts"
+    "serve": "tsx server/index.ts",
+    "api": "powershell -ExecutionPolicy Bypass -File start-api.ps1"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.66.0",

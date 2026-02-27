@@ -55,10 +55,18 @@ export default function ArtifactList({ filterTarget }: Props) {
   const isLoading = canonicalQuery.isLoading || fhirQuery.isLoading
   const isError = canonicalQuery.isError || fhirQuery.isError
 
+  // Normalize strings for comparison — strips hyphens so "providerdirectory"
+  // matches filenames like "provider-directory-practitioner-sample.xml"
+  const norm = (s: string) => s.toLowerCase().replace(/-/g, '')
+
   const allFiles: SampleFile[] = [
     ...(canonicalQuery.data ?? []),
     ...(fhirQuery.data ?? []),
-  ].filter((f) => !filterTarget || f.target === filterTarget || f.filename.includes(filterTarget))
+  ].filter((f) => {
+    if (!filterTarget) return true
+    const nf = norm(filterTarget)
+    return norm(f.target).startsWith(nf) || norm(f.filename).includes(nf)
+  })
 
   async function handleDownload(file: SampleFile) {
     try {

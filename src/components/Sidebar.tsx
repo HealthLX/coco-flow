@@ -31,7 +31,8 @@ export default function Sidebar() {
       const ok = results.filter((r) => r.success).length
       const fail = results.filter((r) => !r.success).length
       pushLog('success', `Generated all samples — ${ok} succeeded${fail ? `, ${fail} failed` : ''}`)
-      qc.invalidateQueries({ queryKey: ['samples'] })
+      qc.invalidateQueries({ queryKey: ['samples', 'canonical'] })
+      qc.invalidateQueries({ queryKey: ['samples', 'fhir'] })
     },
     onError: (err: Error) => {
       pushLog('error', `Generate all failed: ${err.message}`)
@@ -56,9 +57,16 @@ export default function Sidebar() {
 
       {/* Canonical Selector */}
       <div className="px-4 py-4 border-b border-white/10">
-        <label htmlFor="canonical-select" className="block text-[10px] text-white/40 uppercase tracking-widest mb-1.5">
-          Active Canonical
-        </label>
+        <div className="flex items-center justify-between mb-1.5">
+          <label htmlFor="canonical-select" className="block text-[10px] text-white/40 uppercase tracking-widest">
+            Active Canonical
+          </label>
+          {!selectedCanonical && (
+            <span className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ color: '#c0392b', backgroundColor: 'rgba(192,57,43,0.15)' }}>
+              Start here
+            </span>
+          )}
+        </div>
         <div className="relative">
           <select
             id="canonical-select"
