@@ -1,0 +1,9 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - FASTAPI_URL=http://localhost:8000
+    restart: unless-stopped
