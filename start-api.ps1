@@ -6,12 +6,13 @@
 #   -- or --
 #   powershell -ExecutionPolicy Bypass -File start-api.ps1
 
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+# $PSScriptRoot is always the directory containing this .ps1 file, even when
+# invoked via "npm run" or "powershell -File". $MyInvocation.MyCommand.Definition
+# can be empty when launched indirectly, which is why we use $PSScriptRoot here.
+$env:COCO_CANONICAL_SAMPLES_DIR = "$PSScriptRoot\data\canonical-samples"
+$env:COCO_FHIR_SAMPLES_DIR      = "$PSScriptRoot\data\fhir-samples"
 
-$env:COCO_CANONICAL_SAMPLES_DIR = "$scriptDir\data\canonical-samples"
-$env:COCO_FHIR_SAMPLES_DIR      = "$scriptDir\data\fhir-samples"
-
-$apiDir = "$scriptDir\..\coco-canonical"
+$apiDir = "$PSScriptRoot\..\coco-canonical"
 
 if (-not (Test-Path $apiDir)) {
     Write-Error "coco-canonical not found at: $apiDir`nClone it next to coco-flow."
