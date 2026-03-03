@@ -20,7 +20,7 @@ export default function AppSidebar() {
   return (
     <aside
       className="w-56 flex-shrink-0 flex flex-col h-screen"
-      style={{ backgroundColor: '#0d1b2a', borderRight: '3px solid #E60073' }}
+      style={{ backgroundColor: '#0d1b2a', borderRight: '3px solid #c0392b' }}
     >
       {/* Logo */}
       <div className="flex items-center gap-3 px-5 py-5 border-b border-white/10">
@@ -30,8 +30,8 @@ export default function AppSidebar() {
           className="h-10 w-10 rounded object-contain bg-white/5 p-0.5"
         />
         <div>
-          <span className="block text-sm font-bold tracking-widest" style={{ color: '#c0392b' }}>
-            COCO DATA
+          <span className="block text-sm font-bold tracking-wider" style={{ color: '#c0392b' }}>
+            CoCo Data
           </span>
           <span className="block text-[10px] text-white/40 tracking-wider uppercase">
             Flow v0.1
@@ -69,7 +69,7 @@ export default function AppSidebar() {
         </div>
         <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-white/5">
           <Activity className="w-3 h-3 text-white/40" />
-          <span className="text-[11px] text-white/40">FastAPI</span>
+          <span className="text-[11px] text-white/40">CoCo Server</span>
           <span
             className={`w-1.5 h-1.5 rounded-full ml-auto ${
               healthy === undefined

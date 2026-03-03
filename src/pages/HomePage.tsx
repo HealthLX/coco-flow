@@ -66,24 +66,30 @@ export default function HomePage() {
       <div
         className="px-10 py-14 flex items-center justify-between gap-10"
         style={{
-          background: 'linear-gradient(135deg, #10243a 0%, #1c3a52 60%, #0f2233 100%)',
+          background: 'linear-gradient(135deg, #3d1a1a 0%, #2d1f1f 60%, #1a1010 100%)',
         }}
       >
         <div className="max-w-2xl">
           <div
             className="inline-block text-xs font-bold tracking-[0.2em] uppercase px-3 py-1 rounded mb-5"
-            style={{ backgroundColor: 'rgba(192,57,43,0.2)', color: '#c0392b' }}
+            style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.95)' }}
           >
             CMS-9115-F · CMS-0057-F Compliance
           </div>
-          <h1 className="text-3xl font-bold text-white leading-tight mb-4">
-            CoCo Data: Canonical Models<br />
-            for Healthcare Payer Compliance
+          <h1 className="text-3xl font-bold leading-snug mb-3">
+            <span style={{ color: '#c0392b' }}>C</span><span className="text-white">ompliance </span>
+            <span style={{ color: '#c0392b' }}>O</span><span className="text-white">pen Source</span>
+            <br />
+            <span style={{ color: '#c0392b' }}>C</span><span className="text-white">anonical </span>
+            <span style={{ color: '#c0392b' }}>O</span><span className="text-white">ffering</span>
           </h1>
-          <p className="text-base text-white/60 leading-relaxed mb-8">
-            CoCo (Canonical Compliance Objects) defines a neutral, inspectable XML layer between
-            payer source systems and FHIR APIs. It makes CMS compliance observable and auditable
-            rather than opaque, with open schemas, sample generation, and XSLT transforms.
+          <p className="text-sm font-semibold tracking-wider mb-5" style={{ color: '#E60073' }}>
+            CoCo Data
+          </p>
+          <p className="text-base text-white/90 leading-relaxed mb-8">
+            CoCo defines a neutral, inspectable XML layer between payer source systems and FHIR
+            APIs. It makes CMS compliance observable and auditable rather than opaque, with open
+            schemas, sample generation, and XSLT transforms.
           </p>
           <Link
             to="/workspace"
@@ -105,10 +111,10 @@ export default function HomePage() {
             className="w-72 h-72 rounded-2xl object-contain"
             style={{ backgroundColor: 'rgba(255,255,255,0.05)', padding: '20px' }}
           />
-          <span className="text-sm font-bold tracking-[0.25em] uppercase" style={{ color: '#c0392b' }}>
-            COCO DATA
+          <span className="text-sm font-bold tracking-wider" style={{ color: '#c0392b' }}>
+            CoCo Data
           </span>
-          <span className="text-[11px] text-white/30 tracking-widest uppercase">Flow v0.1</span>
+          <span className="text-[11px] text-white/90 tracking-widest uppercase">Flow v0.1</span>
         </div>
       </div>
 

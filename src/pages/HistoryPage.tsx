@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Download, Trash2, Clock, ArrowLeft, History, ArrowRight } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Download, Trash2, Clock, History, ArrowRight } from 'lucide-react'
 import { getHistory, clearHistory, type HistoryEntry } from '../lib/history'
 import { downloadCanonicalSample, downloadFhirSample } from '../services/api'
 
@@ -21,7 +21,6 @@ function formatDate(iso: string): string {
 }
 
 export default function HistoryPage() {
-  const navigate = useNavigate()
   const [entries, setEntries] = useState<HistoryEntry[]>(getHistory)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
@@ -52,23 +51,14 @@ export default function HistoryPage() {
     <div className="max-w-3xl mx-auto px-6 py-8">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate('/')}
-            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back
-          </button>
-          <div>
-            <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-              <History className="w-5 h-5 text-gray-400" />
-              History
-            </h1>
-            <p className="text-xs text-gray-400 mt-0.5">
-              Local record of generated samples and transforms
-            </p>
-          </div>
+        <div>
+          <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <History className="w-5 h-5 text-gray-400" />
+            History
+          </h1>
+          <p className="text-xs text-gray-400 mt-0.5">
+            Local record of generated samples and transforms
+          </p>
         </div>
 
         {entries.length > 0 && (
@@ -89,10 +79,10 @@ export default function HistoryPage() {
           <p className="text-xs text-gray-300 mt-1 mb-5">
             Generated samples and transforms will appear here
           </p>
-          <button onClick={() => navigate('/')} className="btn-primary inline-flex">
+          <Link to="/workspace" className="btn-primary inline-flex">
             Get started
             <ArrowRight className="w-4 h-4" />
-          </button>
+          </Link>
         </div>
       ) : (
         <div className="space-y-2">
