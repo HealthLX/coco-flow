@@ -1,26 +1,21 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { AppProvider } from './context/AppContext'
-import Sidebar from './components/Sidebar'
-import TopBar from './components/TopBar'
-import DiscoverPage from './pages/DiscoverPage'
-import SchemasPage from './pages/SchemasPage'
-import TransformsPage from './pages/TransformsPage'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import AppSidebar from './components/AppSidebar'
+import HomePage from './pages/HomePage'
+import WorkspacePage from './pages/WorkspacePage'
+import HistoryPage from './pages/HistoryPage'
 
 function Layout() {
   return (
     <div className="flex h-screen overflow-hidden bg-[#f2f2f2]">
-      <Sidebar />
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        <TopBar />
-        <main className="flex-1 overflow-y-auto p-6">
-          <Routes>
-            <Route path="/" element={<Navigate to="/discover" replace />} />
-            <Route path="/discover" element={<DiscoverPage />} />
-            <Route path="/schemas" element={<SchemasPage />} />
-            <Route path="/transforms" element={<TransformsPage />} />
-          </Routes>
-        </main>
-      </div>
+      <AppSidebar />
+      <main className="flex-1 overflow-y-auto">
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/workspace" element={<WorkspacePage />} />
+          <Route path="/history" element={<HistoryPage />} />
+          <Route path="*" element={<HomePage />} />
+        </Routes>
+      </main>
     </div>
   )
 }
@@ -28,9 +23,7 @@ function Layout() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AppProvider>
-        <Layout />
-      </AppProvider>
+      <Layout />
     </BrowserRouter>
   )
 }

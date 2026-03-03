@@ -155,11 +155,71 @@ export async function regenerateAndDownload(target: string): Promise<void> {
   return downloadFile(`/samples/canonical/${target}/regenerate`, `${target}-sample.xml`)
 }
 
+/** POST /samples/generate/{target}/content — generate and return XML as text */
+export async function generateSampleContent(target: string): Promise<string> {
+  const res = await fetch(`${BASE}/samples/generate/${target}/content`, { method: 'POST' })
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(`Generate failed ${res.status}: ${text}`)
+  }
+  return res.text()
+}
+
+/** POST /samples/generate/custom — upload XSD and return { xml, filename } for preview */
+export async function generateCustomXsdContent(
+  file: File,
+  rootElement: string,
+): Promise<{ xml: string; filename: string }> {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('root_element', rootElement)
+  const res = await fetch(`${BASE}/samples/generate/custom`, { method: 'POST', body: form })
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(`Custom XSD generate failed ${res.status}: ${text}`)
+  }
+  const xml = await res.text()
+  const cd = res.headers.get('content-disposition')
+  const filename = cd?.match(/filename="?([^";\n]+)"?/)?.[1] ?? 'custom-sample.xml'
+  return { xml, filename }
+}
+
 // ── Transform ────────────────────────────────────────────────────────────────
 
 /** POST /transform/{target} — run XSLT transform for a target */
 export async function transformSample(target: string): Promise<TransformResult> {
   return apiFetch<TransformResult>(`/transform/${target}`, { method: 'POST' })
+}
+
+/** POST /transform/{target}/content — transform and return FHIR XML as text */
+export async function transformSampleContent(target: string): Promise<string> {
+  const res = await fetch(`${BASE}/transform/${target}/content`, { method: 'POST' })
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(`Transform failed ${res.status}: ${text}`)
+  }
+  return res.text()
+}
+
+/** POST /transform/upload — upload canonical XML + XSLT, get FHIR XML as text */
+export async function transformUpload(
+  canonicalXml: string,
+  canonicalFilename: string,
+  xsltFile: File,
+): Promise<string> {
+  const form = new FormData()
+  form.append(
+    'canonical_xml',
+    new Blob([canonicalXml], { type: 'application/xml' }),
+    canonicalFilename,
+  )
+  form.append('xslt_file', xsltFile)
+  const res = await fetch(`${BASE}/transform/upload`, { method: 'POST', body: form })
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(`Transform upload failed ${res.status}: ${text}`)
+  }
+  return res.text()
 }
 
 // ── Artifacts (Schemas & Transforms) ─────────────────────────────────────────
