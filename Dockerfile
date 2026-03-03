@@ -10,17 +10,25 @@ RUN npm run build
 # ── Stage 2: Production image — Python (FastAPI) + Node (Express) ──────────────
 FROM python:3.11-slim AS production
 
-# Install Node.js 20 and git (needed for the clone step)
-RUN apt-get update && apt-get install -y --no-install-recommends curl git && \
+# Which coco-canonical ref (branch, tag, or commit) to build against.
+# Defaults to "main" but can be overridden at build time:
+#   docker build --build-arg COCO_CANONICAL_REF=v1.2.3 ...
+ARG COCO_CANONICAL_REF=main
+
+# Install Node.js 20, git, and procps (ps) needed by concurrently
+RUN apt-get update && apt-get install -y --no-install-recommends curl git procps && \
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y --no-install-recommends nodejs && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Pull the latest coco-canonical source directly from GitHub
+# Pull coco-canonical source directly from GitHub at the specified ref
 # Rebuild this image any time you want to pick up schema/API changes
-RUN git clone --depth 1 https://github.com/HealthLX/coco-canonical.git coco-canonical
+RUN git clone --depth 1 https://github.com/HealthLX/coco-canonical.git coco-canonical && \
+    cd coco-canonical && \
+    git fetch --depth 1 origin "${COCO_CANONICAL_REF}" && \
+    git checkout "${COCO_CANONICAL_REF}"
 
 # Install Python API dependencies from the cloned repo
 RUN pip install --no-cache-dir 'coco-canonical/.[api]'

@@ -56,31 +56,97 @@ Open **http://localhost:5173**
 
 ## Deployment (Docker)
 
-The Dockerfile clones coco-canonical from GitHub at build time — no manual file copying needed.
+The Docker image contains:
+
+- The built coco-flow React frontend.
+- The Node/Express proxy on port `3000`.
+- The FastAPI backend from [coco-canonical](https://github.com/HealthLX/coco-canonical) running on port `8000` **inside the same container**.
+
+You do **not** need to clone `coco-canonical` on the server. The Dockerfile fetches it from GitHub at **build time**.
+
+### Build and run locally
+
+Build an image that tracks the latest `main` branch of `coco-canonical`:
 
 ```bash
-docker build -t coco-flow .
-docker run -p 3000:3000 coco-flow
+docker build -t coco-flow \
+  --build-arg COCO_CANONICAL_REF=main \
+  .
+
+docker run -d -p 3000:3000 --name coco-flow coco-flow
 ```
 
-Or with Compose:
+Open **http://localhost:3000**
+
+### Using a container registry (any Docker host)
+
+Once you have built and pushed an image (manually or via CI) to a registry such as Docker Hub or GHCR, you can run coco-flow on any Docker host:
+
+```bash
+docker pull your-registry/cocoflow:latest
+docker run -d -p 3000:3000 --name coco-flow your-registry/cocoflow:latest
+```
+
+This works the same on EC2, a VM, or any platform that can run Docker containers.
+
+### Using docker-compose
+
+For local development or simple deployments, you can use the provided `docker-compose.yml`:
 
 ```bash
 docker compose up --build -d
 ```
 
-Open **http://your-server:3000**
+This builds the image from the current source and starts a single `app` service that:
 
-### Picking up schema/API changes from coco-canonical
+- Listens on port `3000` on the host.
+- Proxies API calls to the FastAPI backend on `http://localhost:8000` **inside the container**.
 
-Push changes to coco-canonical on GitHub, then rebuild:
+For environments where you **pull** an already-built image instead of building locally, you can use a minimal compose file such as:
 
-```bash
-docker build -t coco-flow .
-docker run -p 3000:3000 coco-flow
+```yaml
+services:
+  app:
+    image: your-registry/cocoflow:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - FASTAPI_URL=http://localhost:8000
+    restart: unless-stopped
 ```
 
-The `git clone` in the Dockerfile always pulls the latest `main`.
+Run it with:
+
+```bash
+docker compose up -d
+```
+
+Open **http://your-server:3000**
+
+### Picking which coco-canonical version to use
+
+The Dockerfile accepts a `COCO_CANONICAL_REF` build argument that controls which ref of `coco-canonical` is baked into the image:
+
+- Branch (e.g. `main`)
+- Tag (e.g. `v1.2.3`)
+- Commit SHA
+
+Examples:
+
+```bash
+# Track the latest main branch (good for dev/staging)
+docker build -t coco-flow-dev \
+  --build-arg COCO_CANONICAL_REF=main \
+  .
+
+# Pin to a tagged release of coco-canonical (good for production)
+docker build -t coco-flow-roster-v1 \
+  --build-arg COCO_CANONICAL_REF=v1.2.3 \
+  .
+```
+
+To upgrade to a newer version of coco-canonical, rebuild the image with a different `COCO_CANONICAL_REF` and redeploy the new image.
 
 ### Environment variables
 
