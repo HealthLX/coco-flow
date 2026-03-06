@@ -64,61 +64,74 @@ export default function HomePage() {
     <div className="min-h-full">
       {/* Hero */}
       <div
-        className="px-10 py-14 flex items-center justify-between gap-10"
+        className="py-14"
         style={{
           background: 'linear-gradient(135deg, #3d1a1a 0%, #2d1f1f 60%, #1a1010 100%)',
         }}
       >
-        <div className="max-w-2xl">
-          <div
-            className="inline-block text-xs font-bold tracking-[0.2em] uppercase px-3 py-1 rounded mb-5"
-            style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.95)' }}
-          >
-            CMS-9115-F · CMS-0057-F Compliance
+        <div className="w-full max-w-6xl mx-auto px-6 sm:px-10 flex items-center justify-between gap-10">
+          <div className="max-w-2xl">
+            <div
+              className="inline-block text-xs font-bold tracking-[0.2em] uppercase px-3 py-1 rounded mb-5"
+              style={{
+                backgroundColor: 'rgba(255,255,255,0.1)',
+                color: 'rgba(255,255,255,0.95)',
+              }}
+            >
+              CMS-9115-F · CMS-0057-F Compliance
+            </div>
+            <h1 className="text-3xl font-bold leading-snug mb-3">
+              <span style={{ color: '#c0392b' }}>C</span>
+              <span className="text-white">ompliance </span>
+              <span style={{ color: '#c0392b' }}>O</span>
+              <span className="text-white">pen Source</span>
+              <br />
+              <span style={{ color: '#c0392b' }}>C</span>
+              <span className="text-white">anonical </span>
+              <span style={{ color: '#c0392b' }}>O</span>
+              <span className="text-white">ffering</span>
+            </h1>
+            <p className="text-sm font-semibold tracking-wider mb-5" style={{ color: '#E60073' }}>
+              CoCo Data
+            </p>
+            <p className="text-base text-white/90 leading-relaxed mb-8">
+              CoCo defines a neutral, inspectable XML layer between payer source systems and FHIR
+              APIs. It makes CMS compliance observable and auditable rather than opaque, with open
+              schemas, sample generation, and XSLT transforms.
+            </p>
+            <Link
+              to="/workspace"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-semibold text-white transition-colors"
+              style={{ backgroundColor: '#c0392b' }}
+              onMouseEnter={(e) =>
+                ((e.currentTarget as HTMLElement).style.backgroundColor = '#96281b')
+              }
+              onMouseLeave={(e) =>
+                ((e.currentTarget as HTMLElement).style.backgroundColor = '#c0392b')
+              }
+            >
+              Open Workspace
+              <ArrowRight className="w-4 h-4" />
+            </Link>
           </div>
-          <h1 className="text-3xl font-bold leading-snug mb-3">
-            <span style={{ color: '#c0392b' }}>C</span><span className="text-white">ompliance </span>
-            <span style={{ color: '#c0392b' }}>O</span><span className="text-white">pen Source</span>
-            <br />
-            <span style={{ color: '#c0392b' }}>C</span><span className="text-white">anonical </span>
-            <span style={{ color: '#c0392b' }}>O</span><span className="text-white">ffering</span>
-          </h1>
-          <p className="text-sm font-semibold tracking-wider mb-5" style={{ color: '#E60073' }}>
-            CoCo Data
-          </p>
-          <p className="text-base text-white/90 leading-relaxed mb-8">
-            CoCo defines a neutral, inspectable XML layer between payer source systems and FHIR
-            APIs. It makes CMS compliance observable and auditable rather than opaque, with open
-            schemas, sample generation, and XSLT transforms.
-          </p>
-          <Link
-            to="/workspace"
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-semibold text-white transition-colors"
-            style={{ backgroundColor: '#c0392b' }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.backgroundColor = '#96281b')}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.backgroundColor = '#c0392b')}
-          >
-            Open Workspace
-            <ArrowRight className="w-4 h-4" />
-          </Link>
-        </div>
 
-        {/* Logo mark */}
-        <div className="hidden lg:flex flex-col items-center gap-4 flex-shrink-0 opacity-90 mr-10">
-          <img
-            src={cocoLogo}
-            alt="CoCo"
-            className="w-72 h-72 rounded-2xl object-contain"
-            style={{ backgroundColor: 'rgba(255,255,255,0.05)', padding: '20px' }}
-          />
-          <span className="text-sm font-bold tracking-wider" style={{ color: '#c0392b' }}>
-            CoCo Data
-          </span>
-          <span className="text-[11px] text-white/90 tracking-widest uppercase">Flow v0.1</span>
+          {/* Logo mark */}
+          <div className="hidden lg:flex flex-col items-center gap-4 flex-shrink-0 opacity-90">
+            <img
+              src={cocoLogo}
+              alt="CoCo"
+              className="w-72 h-72 rounded-2xl object-contain"
+              style={{ backgroundColor: 'rgba(255,255,255,0.05)', padding: '20px' }}
+            />
+            <span className="text-sm font-bold tracking-wider" style={{ color: '#c0392b' }}>
+              CoCo Data
+            </span>
+            <span className="text-[11px] text-white/90 tracking-widest uppercase">Flow v0.1</span>
+          </div>
         </div>
       </div>
 
-      <div className="px-10 py-10 max-w-5xl">
+      <div className="w-full max-w-5xl mx-auto px-6 sm:px-10 py-10">
         {/* How it works */}
         <section className="mb-12">
           <h2 className="text-xs font-bold tracking-[0.15em] uppercase text-gray-400 mb-6">
