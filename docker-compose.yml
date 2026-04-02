@@ -1,6 +1,12 @@
 services:
   app:
-    build: .
+    build:
+      context: .
+      args:
+        # Branch, tag, or full SHA on github.com/HealthLX/coco-canonical (must include Provider transform_files API).
+        # Bump or pass CACHE_BUST so Docker does not reuse an old git clone layer.
+        COCO_CANONICAL_REF: ${COCO_CANONICAL_REF:-main}
+        CACHE_BUST: ${CACHE_BUST:-}
     ports:
       - "3000:3000"
     environment:

@@ -14,6 +14,8 @@ FROM python:3.11-slim AS production
 # Defaults to "main" but can be overridden at build time:
 #   docker build --build-arg COCO_CANONICAL_REF=v1.2.3 ...
 ARG COCO_CANONICAL_REF=main
+# Optional: set to any value (e.g. $(date +%s)) to invalidate the git-clone layer after upstream changes.
+ARG CACHE_BUST
 
 # Install Node.js 20, git, and procps (ps) needed by concurrently
 RUN apt-get update && apt-get install -y --no-install-recommends curl git procps && \
@@ -23,9 +25,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl git procps
 
 WORKDIR /app
 
-# Pull coco-canonical source directly from GitHub at the specified ref
-# Rebuild this image any time you want to pick up schema/API changes
-RUN git clone --depth 1 https://github.com/HealthLX/coco-canonical.git coco-canonical && \
+# Pull coco-canonical source directly from GitHub at the specified ref.
+# This layer is cached until Dockerfile/args change — use CACHE_BUST or docker build --no-cache
+# after coco-canonical updates, or transforms can 400 ("No transform configured") on providerdirectory.
+RUN echo "CACHE_BUST=${CACHE_BUST}" && \
+    git clone --depth 1 https://github.com/HealthLX/coco-canonical.git coco-canonical && \
     cd coco-canonical && \
     git fetch --depth 1 origin "${COCO_CANONICAL_REF}" && \
     git checkout "${COCO_CANONICAL_REF}"

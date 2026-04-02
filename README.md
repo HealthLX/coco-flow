@@ -15,7 +15,8 @@ If you just want to use or demo coco-flow locally, you don’t need to install P
 From the `coco-flow` directory:
 
 ```bash
-docker compose up --build -d
+docker compose build --no-cache
+docker compose up -d
 ```
 
 Then open:
@@ -159,6 +160,37 @@ docker build -t coco-flow-roster-v1 \
 ```
 
 To upgrade to a newer version of coco-canonical, rebuild the image with a different `COCO_CANONICAL_REF` and redeploy the new image.
+
+### Docker: `Transform failed 400` — `No transform configured for target: providerdirectory`
+
+That response means the API’s `sample_builds` config in the container has **no usable XSLT list** for Provider Directory (older `coco-canonical` checkout). Sample **generation** can still work while **transforms** fail if the baked-in repo predates `transform_files` / the multipart transform router.
+
+**Fix:** Force a **fresh** clone of `coco-canonical` when building (Docker often reuses a cached `git clone` layer even when you run `docker compose up --build`):
+
+```bash
+docker compose build --no-cache
+docker compose up -d
+```
+
+Or pass a one-off cache-bust so only the clone layer invalidates:
+
+```bash
+# PowerShell
+$env:CACHE_BUST = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds(); docker compose up --build -d
+
+# bash
+CACHE_BUST=$(date +%s) docker compose up --build -d
+```
+
+You can pin a known-good commit: `COCO_CANONICAL_REF=<full-sha> docker compose build --no-cache`.
+
+**Check inside the running container** (API JSON should show `transform_files` on each Provider Directory build):
+
+```bash
+docker compose exec app curl -s http://127.0.0.1:8000/config
+```
+
+The first provider build entry should include a `transform_files` array (length 5 for the practitioner variant on current `main`).
 
 ### Environment variables
 
