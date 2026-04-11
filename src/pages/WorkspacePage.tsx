@@ -17,12 +17,12 @@ import {
   generateCustomXsdContent,
   transformSampleContent,
   transformUpload,
-  transformAllProviderDirectoryContent,
   buildHasTransforms,
   countXsltSteps,
   normCanonicalId,
+  selectProviderDirectoryBuild,
 } from '../services/api'
-import type { Build, FhirTransformResult, ProviderDirectoryChild } from '../services/api'
+import type { Build, FhirTransformResult } from '../services/api'
 import { addToHistory } from '../lib/history'
 import XmlPreview from '../components/XmlPreview'
 import { storeFileTemp, retrieveTempFile } from './HomePage'
@@ -59,7 +59,8 @@ const CANONICALS: CanonicalDef[] = [
     name: 'providerdirectory',
     label: 'Provider Directory',
     schemaFile: 'Provider-Directory.xsd',
-    description: 'Practitioners and organizations — NPIs, specialties, networks',
+    description:
+      'Practitioner and organization providers in one canonical file — NPIs, specialties, networks',
   },
   {
     name: 'clinical',
@@ -75,24 +76,6 @@ function schemaHasBuiltinTransforms(builds: Build[], canonicalName: string): boo
   return builds.some((b) => normCanonicalId(b.canonical_name) === want && buildHasTransforms(b))
 }
 
-/** Selected variant has transforms (Provider Directory has two builds under one canonical name). */
-function hasActiveBuiltinTransform(
-  builds: Build[],
-  canonicalName: string | null,
-  pdVariant: ProviderDirectoryChild,
-): boolean {
-  if (!canonicalName) return false
-  const want = normCanonicalId(canonicalName)
-  return builds.some((b) => {
-    if (normCanonicalId(b.canonical_name) !== want || !buildHasTransforms(b)) return false
-    if (want === 'providerdirectory') {
-      const child = normCanonicalId(b.provider_directory_child)
-      return child === pdVariant
-    }
-    return true
-  })
-}
-
 function downloadXmlFromMemory(xml: string, filename: string) {
   const blob = new Blob([xml], { type: 'application/xml' })
   const url = URL.createObjectURL(blob)
@@ -105,19 +88,14 @@ function downloadXmlFromMemory(xml: string, filename: string) {
   URL.revokeObjectURL(url)
 }
 
-function canonicalSampleFilename(canonicalName: string, pdVariant: ProviderDirectoryChild): string {
-  if (canonicalName === 'providerdirectory') {
-    return pdVariant === 'practitioner'
-      ? 'provider-directory-practitioner-sample.xml'
-      : 'provider-directory-organization-sample.xml'
-  }
+function canonicalSampleFilename(canonicalName: string): string {
+  if (canonicalName === 'providerdirectory') return 'provider-directory-sample.xml'
   return `${canonicalName}-sample.xml`
 }
 
-function fhirExportBasename(canonicalName: string, pdVariant: ProviderDirectoryChild): string {
-  if (canonicalName === 'providerdirectory') {
-    return pdVariant === 'practitioner' ? 'provider-directory-practitioner' : 'provider-directory-organization'
-  }
+/** Base name for single-FHIR download/preview titles (multipart uses each part filename from the API). */
+function fhirExportBasename(canonicalName: string): string {
+  if (canonicalName === 'providerdirectory') return 'providerdirectory'
   return canonicalName
 }
 
@@ -136,8 +114,6 @@ export default function WorkspacePage() {
   // ── Selector state ────────────────────────────────────────────────────────
   const [selectorTab, setSelectorTab] = useState<SelectorTab>('predefined')
   const [selectedCanonical, setSelectedCanonical] = useState<string | null>(null)
-  const [providerDirectoryVariant, setProviderDirectoryVariant] =
-    useState<ProviderDirectoryChild>('practitioner')
 
   // Custom XSD inputs
   const [xsdFile, setXsdFile] = useState<File | null>(null)
@@ -171,22 +147,13 @@ export default function WorkspacePage() {
     !buildsLoading &&
     !buildsError &&
     !!selectedCanonical &&
-    hasActiveBuiltinTransform(builds, selectedCanonical, providerDirectoryVariant)
-
-  const providerSchemaReady =
-    !buildsLoading &&
-    !buildsError &&
-    schemaHasBuiltinTransforms(builds, 'providerdirectory')
+    schemaHasBuiltinTransforms(builds, selectedCanonical)
 
   const xsltCountForSelection =
     isPredefined && selectedCanonical && !buildsLoading && !buildsError
       ? (() => {
           if (normCanonicalId(selectedCanonical) === 'providerdirectory') {
-            const b = builds.find(
-              (x) =>
-                normCanonicalId(x.canonical_name) === 'providerdirectory' &&
-                normCanonicalId(x.provider_directory_child) === providerDirectoryVariant,
-            )
+            const b = selectProviderDirectoryBuild(builds)
             return b ? countXsltSteps(b) : 0
           }
           const b = builds.find(
@@ -216,16 +183,6 @@ export default function WorkspacePage() {
 
   const handleSelectCanonical = (name: string) => {
     setSelectedCanonical(name)
-    if (name === 'providerdirectory') setProviderDirectoryVariant('practitioner')
-    setCanonicalXml(null)
-    setCanonicalFilename(null)
-    setFhirResult(null)
-    setGenerateError(null)
-    setTransformError(null)
-  }
-
-  const handleProviderDirectoryVariant = (variant: ProviderDirectoryChild) => {
-    setProviderDirectoryVariant(variant)
     setCanonicalXml(null)
     setCanonicalFilename(null)
     setFhirResult(null)
@@ -252,20 +209,12 @@ export default function WorkspacePage() {
 
     try {
       if (isPredefined && selectedCanonical) {
-        const genOpts =
-          selectedCanonical === 'providerdirectory'
-            ? { providerDirectoryChild: providerDirectoryVariant }
-            : undefined
-        const xml = await generateSampleContent(selectedCanonical, genOpts)
-        const filename = canonicalSampleFilename(selectedCanonical, providerDirectoryVariant)
+        const xml = await generateSampleContent(selectedCanonical)
+        const filename = canonicalSampleFilename(selectedCanonical)
         setCanonicalXml(xml)
         setCanonicalFilename(filename)
-        const genLabel =
-          selectedCanonical === 'providerdirectory'
-            ? `${displayName} (${providerDirectoryVariant === 'practitioner' ? 'Practitioner' : 'Organization'})`
-            : displayName
         addToHistory({
-          label: genLabel,
+          label: displayName,
           actionType: 'generated',
           fileType: 'canonical',
           serverFilename: filename,
@@ -309,19 +258,11 @@ export default function WorkspacePage() {
           serverFilename: null,
         })
       } else if (isPredefined && selectedCanonical && activeTransform) {
-        const tOpts =
-          selectedCanonical === 'providerdirectory'
-            ? { providerDirectoryChild: providerDirectoryVariant }
-            : undefined
-        const result = await transformSampleContent(selectedCanonical, tOpts)
+        const result = await transformSampleContent(selectedCanonical)
         setFhirResult(result)
-        const base = fhirExportBasename(selectedCanonical, providerDirectoryVariant)
-        const historyLabel =
-          selectedCanonical === 'providerdirectory'
-            ? `${displayName} (${providerDirectoryVariant === 'practitioner' ? 'Practitioner' : 'Organization'}) → FHIR`
-            : `${displayName} → FHIR`
+        const base = fhirExportBasename(selectedCanonical)
         addToHistory({
-          label: historyLabel,
+          label: `${displayName} → FHIR`,
           actionType: 'transformed',
           fileType: 'fhir',
           serverFilename: result.kind === 'single' ? `${base}-fhir.xml` : null,
@@ -336,28 +277,6 @@ export default function WorkspacePage() {
     }
   }
 
-  /** Regenerate both provider samples on the server and run every XSLT for both YAML builds. */
-  const handleTransformAllProviderPipelines = async () => {
-    if (selectedCanonical !== 'providerdirectory' || !providerSchemaReady) return
-    setTransforming(true)
-    setTransformError(null)
-    setFhirResult(null)
-    try {
-      const result = await transformAllProviderDirectoryContent()
-      setFhirResult(result)
-      addToHistory({
-        label: `${displayName} → all FHIR resources (practitioner + organization pipelines)`,
-        actionType: 'transformed',
-        fileType: 'fhir',
-        serverFilename: null,
-      })
-    } catch (e) {
-      setTransformError((e as Error).message)
-    } finally {
-      setTransforming(false)
-    }
-  }
-
   // ── Export ────────────────────────────────────────────────────────────────
 
   const exportCanonical = () => {
@@ -365,9 +284,7 @@ export default function WorkspacePage() {
   }
   const exportFhir = () => {
     if (!fhirResult) return
-    const base = selectedCanonical
-      ? fhirExportBasename(selectedCanonical, providerDirectoryVariant)
-      : 'fhir-output'
+    const base = selectedCanonical ? fhirExportBasename(selectedCanonical) : 'fhir-output'
     if (fhirResult.kind === 'single') {
       downloadXmlFromMemory(fhirResult.xml, `${base}-fhir.xml`)
       return
@@ -383,9 +300,7 @@ export default function WorkspacePage() {
 
   const hasFhirOutput = !!fhirResult
 
-  const showTransformStep =
-    hasGenerated ||
-    (isPredefined && selectedCanonical === 'providerdirectory' && providerSchemaReady)
+  const showTransformStep = hasGenerated
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -521,34 +436,10 @@ export default function WorkspacePage() {
           </div>
           {selectedCanonical === 'providerdirectory' && (
             <div className="px-5 py-3 bg-gray-50/80 border-t border-gray-100">
-              <p className="text-xs font-semibold text-gray-600 mb-2">Sample variant</p>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleProviderDirectoryVariant('practitioner')}
-                  className={`px-3 py-1.5 rounded text-xs font-medium border transition-colors ${
-                    providerDirectoryVariant === 'practitioner'
-                      ? 'border-coco-red bg-red-50 text-coco-red'
-                      : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  Practitioner
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleProviderDirectoryVariant('providing_organization')}
-                  className={`px-3 py-1.5 rounded text-xs font-medium border transition-colors ${
-                    providerDirectoryVariant === 'providing_organization'
-                      ? 'border-coco-red bg-red-50 text-coco-red'
-                      : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  Providing organization
-                </button>
-              </div>
-              <p className="text-[11px] text-gray-400 mt-2 max-w-xl">
-                Same XSD; different sample XML. Each variant uses the XSLT list from{' '}
-                <span className="font-mono">sample_builds.yaml</span>.
+              <p className="text-[11px] text-gray-600 max-w-xl leading-relaxed">
+                A single generated or uploaded file may include both practitioner and organization
+                providers. The API maps them with separate XSLTs (e.g. Practitioner vs Organization
+                resources), delivered as one multipart FHIR response.
               </p>
             </div>
           )}
@@ -673,18 +564,6 @@ export default function WorkspacePage() {
             <span className="text-xs text-gray-400">(optional)</span>
           </div>
 
-          {!hasGenerated &&
-            isPredefined &&
-            selectedCanonical === 'providerdirectory' &&
-            providerSchemaReady && (
-              <div className="mb-4 text-xs text-amber-900 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-                Generate a sample above to preview canonical XML here. You can still run{' '}
-                <span className="font-semibold">all</span> Provider Directory XSLTs on the server using
-                the button below (both sample variants from{' '}
-                <span className="font-mono">sample_builds.yaml</span>).
-              </div>
-            )}
-
           <div className="space-y-4">
             {/* Built-in transform */}
             {selectorTab === 'predefined' && (
@@ -699,7 +578,7 @@ export default function WorkspacePage() {
                         ? 'Generate a sample first'
                         : activeTransform
                           ? xsltCountForSelection > 0
-                            ? `Runs ${xsltCountForSelection} FHIR resource transform(s) for this variant`
+                            ? `Runs ${xsltCountForSelection} FHIR resource transform(s) on this canonical file (one combined response)`
                             : undefined
                           : buildsLoading
                             ? 'Loading build configuration…'
@@ -718,27 +597,6 @@ export default function WorkspacePage() {
                       </>
                     )}
                   </button>
-                  {selectedCanonical === 'providerdirectory' && providerSchemaReady && (
-                    <button
-                      type="button"
-                      onClick={handleTransformAllProviderPipelines}
-                      disabled={transforming}
-                      className="btn-secondary disabled:opacity-40"
-                      title="Regenerate practitioner + organization samples on the API host and run every XSLT for both"
-                    >
-                      {transforming ? (
-                        <>
-                          <span className="w-4 h-4 border-2 border-coco-red/30 border-t-coco-red rounded-full animate-spin" />
-                          Running all…
-                        </>
-                      ) : (
-                        <>
-                          <Shuffle className="w-4 h-4" />
-                          Run all Provider Directory transforms
-                        </>
-                      )}
-                    </button>
-                  )}
                   {!activeTransform && !buildsLoading && (
                     <span className="text-xs text-gray-500 bg-gray-100 border border-gray-200 rounded px-2.5 py-1 flex items-center gap-1.5">
                       <AlertCircle className="w-3.5 h-3.5 text-gray-400" />
@@ -752,8 +610,7 @@ export default function WorkspacePage() {
                 {hasGenerated && activeTransform && xsltCountForSelection > 0 && (
                   <p className="text-[11px] text-gray-500 pl-0.5">
                     Includes {xsltCountForSelection} FHIR resource output
-                    {xsltCountForSelection === 1 ? '' : 's'} for the selected variant (one combined
-                    response).
+                    {xsltCountForSelection === 1 ? '' : 's'} in one combined response.
                   </p>
                 )}
               </div>
@@ -827,7 +684,7 @@ export default function WorkspacePage() {
           content={fhirResult.xml}
           title={
             selectedCanonical
-              ? `${fhirExportBasename(selectedCanonical, providerDirectoryVariant)}-fhir.xml`
+              ? `${fhirExportBasename(selectedCanonical)}-fhir.xml`
               : 'FHIR Output'
           }
           badgeClass="badge-fhir"
@@ -839,7 +696,7 @@ export default function WorkspacePage() {
           <XmlPreview
             key={`${part.filename}-${part.resourceType}-${idx}`}
             content={part.xml}
-            title={`${part.resourceType} — ${part.filename}`}
+            title={part.filename}
             badgeClass="badge-fhir"
             badgeLabel={part.resourceType}
           />

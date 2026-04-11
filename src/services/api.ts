@@ -137,8 +137,17 @@ export async function getSampleBuildsConfig(): Promise<SampleBuildsConfig> {
   return apiFetch<SampleBuildsConfig>('/config')
 }
 
-/** Provider Directory YAML variants (sample_builds.yaml). */
+/** Legacy: sample_builds.yaml multi-row Provider Directory disambiguation only. Omit in normal use. */
 export type ProviderDirectoryChild = 'practitioner' | 'providing_organization'
+
+/** Prefer unified PD build (no `provider_directory_child`); else first PD build with XSLT. */
+export function selectProviderDirectoryBuild(builds: Build[]): Build | undefined {
+  const pd = builds.filter(
+    (b) => normCanonicalId(b.canonical_name) === 'providerdirectory' && buildHasTransforms(b),
+  )
+  const unified = pd.find((b) => !String(b.provider_directory_child ?? '').trim())
+  return unified ?? pd[0]
+}
 
 export interface SampleFile {
   filename: string
@@ -294,7 +303,11 @@ export async function regenerateAndDownload(target: string): Promise<void> {
   return downloadFile(`/samples/canonical/${target}/regenerate`, `${target}-sample.xml`)
 }
 
-/** POST /samples/generate/{target}/content — generate and return XML as text */
+/**
+ * POST /samples/generate/{target}/content — generate and return XML as text.
+ * Omit `providerDirectoryChild` for the default single providerdirectory build. Pass only when
+ * sample_builds.yaml defines multiple providerdirectory rows (legacy).
+ */
 export async function generateSampleContent(
   target: string,
   options?: { providerDirectoryChild?: ProviderDirectoryChild },
@@ -397,7 +410,11 @@ function parseMultipartMixedXml(body: string, contentType: string): FhirTransfor
   return out
 }
 
-/** POST /transform/{target}/content — FHIR XML; multipart when a build has multiple XSLTs. */
+/**
+ * POST /transform/{target}/content — FHIR XML; multipart when a build has multiple XSLTs.
+ * Omit `providerDirectoryChild` for the default single providerdirectory build. Pass only for
+ * legacy multi-build YAML.
+ */
 export async function transformSampleContent(
   target: string,
   options?: { providerDirectoryChild?: ProviderDirectoryChild },
@@ -421,53 +438,6 @@ export async function transformSampleContent(
     return { kind: 'multipart', parts }
   }
   return { kind: 'single', xml: body }
-}
-
-function flattenFhirResultForMerge(
-  result: FhirTransformResult,
-  variantLabel: string,
-  filePrefix: string,
-): FhirTransformPart[] {
-  if (result.kind === 'single') {
-    return [
-      {
-        xml: result.xml,
-        filename: `${filePrefix}output-fhir.xml`,
-        resourceType: variantLabel,
-      },
-    ]
-  }
-  return result.parts.map((p) => ({
-    ...p,
-    filename: `${filePrefix}${p.filename}`,
-    resourceType: `${variantLabel} · ${p.resourceType}`,
-  }))
-}
-
-/**
- * Run every Provider Directory build from sample_builds.yaml: regenerate both canonical samples on
- * the server, run each variant’s full XSLT list, return one combined multipart-style result for the UI.
- */
-export async function transformAllProviderDirectoryContent(): Promise<FhirTransformResult> {
-  const steps: Array<{
-    variant: ProviderDirectoryChild
-    label: string
-    filePrefix: string
-  }> = [
-    { variant: 'practitioner', label: 'Practitioner sample', filePrefix: 'practitioner-' },
-    {
-      variant: 'providing_organization',
-      label: 'Organization sample',
-      filePrefix: 'organization-',
-    },
-  ]
-  const allParts: FhirTransformPart[] = []
-  for (const { variant, label, filePrefix } of steps) {
-    await generateSampleContent('providerdirectory', { providerDirectoryChild: variant })
-    const result = await transformSampleContent('providerdirectory', { providerDirectoryChild: variant })
-    allParts.push(...flattenFhirResultForMerge(result, label, filePrefix))
-  }
-  return { kind: 'multipart', parts: allParts }
 }
 
 /** POST /transform/upload — upload canonical XML + XSLT, get FHIR XML as text */

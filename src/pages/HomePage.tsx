@@ -24,7 +24,8 @@ const SCHEMAS = [
   {
     name: 'Provider Directory',
     file: 'Provider-Directory.xsd',
-    description: 'Practitioners and organizations: NPIs, specialties, locations, networks, and affiliations.',
+    description:
+      'Practitioner and organization rows in one canonical file — NPIs, specialties, locations, networks, affiliations.',
     transform: 'FHIR Provider (multi-resource)',
   },
   {

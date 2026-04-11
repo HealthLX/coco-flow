@@ -184,13 +184,13 @@ CACHE_BUST=$(date +%s) docker compose up --build -d
 
 You can pin a known-good commit: `COCO_CANONICAL_REF=<full-sha> docker compose build --no-cache`.
 
-**Check inside the running container** (API JSON should show `transform_files` on each Provider Directory build):
+**Check inside the running container** (API JSON should show a unified Provider Directory build with `transform_files`):
 
 ```bash
 docker compose exec app curl -s http://127.0.0.1:8000/config
 ```
 
-The first provider build entry should include a `transform_files` array (length 5 for the practitioner variant on current `main`).
+The `providerdirectory` build entry should include a non-empty `transform_files` array (one canonical sample `provider-directory-sample.xml`; multiple XSLTs produce a multipart FHIR response).
 
 ### Environment variables
 
