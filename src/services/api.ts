@@ -14,6 +14,8 @@ export interface Build {
   output_file_name: string
   transform_file: string | null
   transform_files?: TransformFileEntry[] | null
+  /** Folder-driven transforms: every *.xsl in this dir runs (resolved server-side). */
+  transform_dir?: string | null
   provider_directory_child?: string | null
   fhir_profile?: string | null
 }
@@ -42,11 +44,12 @@ function inferProviderBuildHasTransforms(b: Build): boolean {
   return out.startsWith('provider-directory-') && out.endsWith('-sample.xml')
 }
 
-/** True if this build has at least one XSLT (single or list from sample_builds.yaml). */
+/** True if this build has at least one XSLT (single, list, or folder-driven dir). */
 export function buildHasTransforms(b: Build): boolean {
   if (b.transform_file && String(b.transform_file).trim()) return true
   const list = b.transform_files
   if (Array.isArray(list) && list.length > 0) return true
+  if (b.transform_dir && String(b.transform_dir).trim()) return true
   return inferProviderBuildHasTransforms(b)
 }
 
@@ -112,6 +115,8 @@ function normalizeBuildRow(row: unknown): Build {
     if (entries.length > 0) transform_files = entries
   }
 
+  const tdir = normKey(b, 'transform_dir', 'transformDir')
+  const transform_dir = typeof tdir === 'string' && tdir.trim() ? tdir.trim() : null
   const pdc = normKey(b, 'provider_directory_child', 'providerDirectoryChild')
   const fhir = normKey(b, 'fhir_profile', 'fhirProfile')
   const canon = normKey(b, 'canonical_name', 'canonicalName')
@@ -126,6 +131,7 @@ function normalizeBuildRow(row: unknown): Build {
     output_file_name: String(outFn ?? '').trim(),
     transform_file,
     transform_files,
+    transform_dir,
     provider_directory_child:
       pdc == null || pdc === '' ? null : String(pdc).trim(),
     fhir_profile: fhir == null || fhir === '' ? undefined : String(fhir).trim(),
@@ -167,6 +173,10 @@ export interface SchemaFile {
 
 export interface TransformFile {
   filename: string
+  /** Basename for display (e.g. "Clinical_Patient.xsl"); derived from filename. */
+  displayName?: string
+  /** Schema subfolder when transforms are organized (e.g. "Clinical"); undefined for flat layout. */
+  group?: string
   path?: string
   size?: number
   source?: string
@@ -476,17 +486,37 @@ export async function downloadSchema(filename: string): Promise<void> {
   return downloadFile(`/schemas/${filename}`, filename)
 }
 
-/** GET /transforms — list all XSLT transform filenames */
+/**
+ * GET /transforms — list all XSLT transform filenames.
+ *
+ * Works with both backend layouts:
+ *  - flat (older coco-canonical): "roster-patient.xsl"
+ *  - schema-organized (current): "Roster/roster-patient.xsl", "Clinical/Clinical_Patient.xsl"
+ * The returned `filename` is the path relative to transforms/v10.0/ (used as-is for download);
+ * `displayName` is the basename for UI, and `group` is the schema folder when present.
+ */
 export async function getTransforms(): Promise<TransformFile[]> {
   const data = await apiFetch<string[] | TransformFile[]>('/transforms')
-  return (data as (string | TransformFile)[]).map((item) =>
-    typeof item === 'string' ? { filename: item } : item
-  )
+  return (data as (string | TransformFile)[]).map((item) => {
+    const entry: TransformFile = typeof item === 'string' ? { filename: item } : item
+    const rel = entry.filename
+    const slash = rel.lastIndexOf('/')
+    return {
+      ...entry,
+      displayName: slash >= 0 ? rel.slice(slash + 1) : rel,
+      group: slash >= 0 ? rel.slice(0, slash) : undefined,
+    }
+  })
 }
 
-/** GET /transforms/{filename} — download a transform file */
+/**
+ * GET /transforms/{filename} — download a transform file.
+ * `filename` may be a nested subpath (e.g. "Clinical/Clinical_Patient.xsl"); the slashes are
+ * preserved in the URL (the API serves it via a path route) and the saved file uses the basename.
+ */
 export async function downloadTransform(filename: string): Promise<void> {
-  return downloadFile(`/transforms/${filename}`, filename)
+  const baseName = filename.slice(filename.lastIndexOf('/') + 1)
+  return downloadFile(`/transforms/${filename}`, baseName)
 }
 
 // ── Custom XSD upload ─────────────────────────────────────────────────────────
