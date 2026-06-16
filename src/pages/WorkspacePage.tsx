@@ -10,6 +10,7 @@ import {
   ChevronUp,
   PackageOpen,
   CheckCircle2,
+  ShieldCheck,
 } from 'lucide-react'
 import {
   getBuilds,
@@ -17,14 +18,17 @@ import {
   generateCustomXsdContent,
   transformSampleContent,
   transformUpload,
+  validateCanonicalXml,
+  validateCustomXml,
   buildHasTransforms,
   countXsltSteps,
   normCanonicalId,
   selectProviderDirectoryBuild,
 } from '../services/api'
-import type { Build, FhirTransformResult } from '../services/api'
+import type { Build, FhirTransformResult, ValidationResult as ValidationResultData } from '../services/api'
 import { addToHistory } from '../lib/history'
 import XmlPreview from '../components/XmlPreview'
+import ValidationResult from '../components/ValidationResult'
 import { storeFileTemp, retrieveTempFile } from './HomePage'
 
 // ── Canonical definitions ─────────────────────────────────────────────────
@@ -127,6 +131,11 @@ export default function WorkspacePage() {
   const [canonicalXml, setCanonicalXml] = useState<string | null>(null)
   const [canonicalFilename, setCanonicalFilename] = useState<string | null>(null)
 
+  // ── Validate state ────────────────────────────────────────────────────────
+  const [validating, setValidating] = useState(false)
+  const [validateError, setValidateError] = useState<string | null>(null)
+  const [validationResult, setValidationResult] = useState<ValidationResultData | null>(null)
+
   // ── Transform state ───────────────────────────────────────────────────────
   const [transforming, setTransforming] = useState(false)
   const [transformError, setTransformError] = useState<string | null>(null)
@@ -179,6 +188,8 @@ export default function WorkspacePage() {
     setFhirResult(null)
     setGenerateError(null)
     setTransformError(null)
+    setValidationResult(null)
+    setValidateError(null)
   }
 
   const handleSelectCanonical = (name: string) => {
@@ -188,6 +199,8 @@ export default function WorkspacePage() {
     setFhirResult(null)
     setGenerateError(null)
     setTransformError(null)
+    setValidationResult(null)
+    setValidateError(null)
   }
 
   const handleXsdFileChange = (file: File | null) => {
@@ -206,6 +219,8 @@ export default function WorkspacePage() {
     setCanonicalXml(null)
     setCanonicalFilename(null)
     setFhirResult(null)
+    setValidationResult(null)
+    setValidateError(null)
 
     try {
       if (isPredefined && selectedCanonical) {
@@ -238,6 +253,37 @@ export default function WorkspacePage() {
       setGenerateError((e as Error).message)
     } finally {
       setGenerating(false)
+    }
+  }
+
+  const handleValidate = async () => {
+    if (!canonicalXml || !canonicalFilename) return
+    setValidating(true)
+    setValidateError(null)
+    setValidationResult(null)
+
+    try {
+      let result: ValidationResultData
+      if (isPredefined && selectedCanonical) {
+        const def = CANONICALS.find((c) => c.name === selectedCanonical)
+        if (!def) throw new Error('No schema available for this selection.')
+        result = await validateCanonicalXml(canonicalXml, def.schemaFile)
+      } else {
+        const file = xsdFileKey ? retrieveTempFile(xsdFileKey) : null
+        if (!file) throw new Error('Upload an XSD file to validate against.')
+        result = await validateCustomXml(canonicalXml, canonicalFilename, file)
+      }
+      setValidationResult(result)
+      addToHistory({
+        label: `${displayName} — XSD ${result.valid ? 'valid' : `${result.error_count} issue(s)`}`,
+        actionType: 'validated',
+        fileType: 'canonical',
+        serverFilename: null,
+      })
+    } catch (e) {
+      setValidateError((e as Error).message)
+    } finally {
+      setValidating(false)
     }
   }
 
@@ -553,12 +599,65 @@ export default function WorkspacePage() {
         />
       )}
 
-      {/* ── Step 3: Transform ── */}
+      {/* ── Step 3: Validate against XSD ── */}
       {showTransformStep && (
         <div className="card p-5">
           <div className="flex items-center gap-2 mb-4">
             <div className="flex h-6 w-6 items-center justify-center rounded-full bg-coco-red text-white text-xs font-bold flex-shrink-0">
               3
+            </div>
+            <h2 className="text-sm font-semibold text-gray-800">Validate against XSD</h2>
+            <span className="text-xs text-gray-400">(optional)</span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={handleValidate}
+              disabled={!hasGenerated || validating}
+              className="btn-secondary disabled:opacity-40"
+              title={
+                isPredefined
+                  ? `Validate the generated XML against its CoCo XSD schema`
+                  : `Validate the generated XML against the uploaded XSD`
+              }
+            >
+              {validating ? (
+                <>
+                  <span className="w-4 h-4 border-2 border-coco-red/30 border-t-coco-red rounded-full animate-spin" />
+                  Validating…
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="w-4 h-4" />
+                  Validate against XSD
+                </>
+              )}
+            </button>
+            <span className="text-xs text-gray-400">
+              Checks schema conformance — structure, data types, and required elements.
+            </span>
+          </div>
+
+          {validateError && (
+            <div className="mt-3 flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              {validateError}
+            </div>
+          )}
+          {validationResult && (
+            <div className="mt-3">
+              <ValidationResult result={validationResult} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Step 4: Transform ── */}
+      {showTransformStep && (
+        <div className="card p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-coco-red text-white text-xs font-bold flex-shrink-0">
+              4
             </div>
             <h2 className="text-sm font-semibold text-gray-800">Transform to FHIR</h2>
             <span className="text-xs text-gray-400">(optional)</span>
@@ -689,6 +788,7 @@ export default function WorkspacePage() {
           }
           badgeClass="badge-fhir"
           badgeLabel="FHIR"
+          allowJson
         />
       )}
       {fhirResult?.kind === 'multipart' &&
@@ -699,15 +799,16 @@ export default function WorkspacePage() {
             title={part.filename}
             badgeClass="badge-fhir"
             badgeLabel={part.resourceType}
+            allowJson
           />
         ))}
 
-      {/* ── Step 4: Export ── */}
+      {/* ── Step 5: Export ── */}
       {(hasGenerated || hasFhirOutput) && (
         <div className="card p-5">
           <div className="flex items-center gap-2 mb-4">
             <div className="flex h-6 w-6 items-center justify-center rounded-full bg-coco-red text-white text-xs font-bold flex-shrink-0">
-              4
+              5
             </div>
             <h2 className="text-sm font-semibold text-gray-800">Export</h2>
           </div>

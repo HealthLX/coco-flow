@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import AppSidebar from './components/AppSidebar'
 import HomePage from './pages/HomePage'
 import WorkspacePage from './pages/WorkspacePage'
+import SchemasPage from './pages/SchemasPage'
 import HistoryPage from './pages/HistoryPage'
 
 function Layout() {
@@ -12,6 +13,7 @@ function Layout() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/workspace" element={<WorkspacePage />} />
+          <Route path="/schemas" element={<SchemasPage />} />
           <Route path="/history" element={<HistoryPage />} />
           <Route path="*" element={<HomePage />} />
         </Routes>

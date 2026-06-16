@@ -1,9 +1,41 @@
-node_modules/
-dist/
-dist-server/
-.git/
+# ── coco-flow: exclude build artifacts ────────────────────────────────────────
+coco-flow/node_modules/
+coco-flow/dist/
+coco-flow/dist-server/
+coco-flow/.git/
+
+# ── coco-canonical: exclude runtime artifacts and dev tooling ─────────────────
+coco-canonical/.git/
+coco-canonical/.github/
+coco-canonical/.cursor/
+coco-canonical/venv/
+coco-canonical/.pytest_cache/
+coco-canonical/coco_canonical.egg-info/
+coco-canonical/build/
+coco-canonical/canonical-samples/
+coco-canonical/fhir-samples/
+coco-canonical/tests/
+coco-canonical/docs/
+coco-canonical/assets/
+
+# ── Exclude all other sibling repos ───────────────────────────────────────────
+hlx-saas/
+hlx-canonical/
+hlx-canonical-docs/
+coco-canonical-test/
+coco-canonical-test-1/
+KiroPoster_MGT/
+Matdogs_Website/
+Personal-Portfolio_V2/
+personal_tools/
+Personal_Website/
+portfolio/
+poster_management/
+radiology_patient_summarizer/
+WordleGame/
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+*.code-workspace
+*.log
 .env
 .env.local
-*.log
-*.md
-docker-compose.yml

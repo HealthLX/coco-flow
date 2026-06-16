@@ -2,47 +2,34 @@
 FROM node:20-slim AS frontend-builder
 
 WORKDIR /app
-COPY package*.json ./
+COPY coco-flow/package*.json ./
 RUN npm ci
-COPY . .
+COPY coco-flow/ .
 RUN npm run build
 
 # ── Stage 2: Production image — Python (FastAPI) + Node (Express) ──────────────
 FROM python:3.11-slim AS production
 
-# Which coco-canonical ref (branch, tag, or commit) to build against.
-# Defaults to "main" but can be overridden at build time:
-#   docker build --build-arg COCO_CANONICAL_REF=v1.2.3 ...
-ARG COCO_CANONICAL_REF=main
-# Optional: set to any value (e.g. $(date +%s)) to invalidate the git-clone layer after upstream changes.
-ARG CACHE_BUST
-
-# Install Node.js 20, git, and procps (ps) needed by concurrently
-RUN apt-get update && apt-get install -y --no-install-recommends curl git procps && \
+# Install Node.js 20 and procps (ps) needed by concurrently
+RUN apt-get update && apt-get install -y --no-install-recommends curl procps && \
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y --no-install-recommends nodejs && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Pull coco-canonical source directly from GitHub at the specified ref.
-# This layer is cached until Dockerfile/args change — use CACHE_BUST or docker build --no-cache
-# after coco-canonical updates, or transforms can 400 ("No transform configured") on providerdirectory.
-RUN echo "CACHE_BUST=${CACHE_BUST}" && \
-    git clone --depth 1 https://github.com/HealthLX/coco-canonical.git coco-canonical && \
-    cd coco-canonical && \
-    git fetch --depth 1 origin "${COCO_CANONICAL_REF}" && \
-    git checkout "${COCO_CANONICAL_REF}"
+# Copy local coco-canonical source (context root is the parent of both repos)
+COPY coco-canonical/ ./coco-canonical/
 
-# Install Python API dependencies from the cloned repo
+# Install Python API dependencies
 RUN pip install --no-cache-dir 'coco-canonical/.[api]'
 
 # Install Node production dependencies (Express + concurrently)
-COPY package*.json ./
+COPY coco-flow/package*.json ./
 RUN npm ci --omit=dev
 
 # Copy Express proxy server
-COPY server/ ./server/
+COPY coco-flow/server/ ./server/
 
 # Copy built React frontend from Stage 1
 COPY --from=frontend-builder /app/dist ./dist

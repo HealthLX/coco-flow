@@ -471,6 +471,55 @@ export async function transformUpload(
   return res.text()
 }
 
+// ── Validation (XSD) ─────────────────────────────────────────────────────────
+
+export interface ValidationIssue {
+  message: string
+  path?: string | null
+  line?: number | null
+}
+
+export interface ValidationResult {
+  valid: boolean
+  schema: string
+  error_count: number
+  errors: ValidationIssue[]
+}
+
+/** POST /validate/{schemaFilename} — validate canonical XML text against a built-in XSD. */
+export async function validateCanonicalXml(
+  xml: string,
+  schemaFilename: string,
+): Promise<ValidationResult> {
+  const res = await fetch(`${BASE}/validate/${encodeURIComponent(schemaFilename)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/xml' },
+    body: xml,
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(`Validation failed ${res.status}: ${text}`)
+  }
+  return res.json() as Promise<ValidationResult>
+}
+
+/** POST /validate/upload — validate canonical XML against a user-uploaded XSD. */
+export async function validateCustomXml(
+  xml: string,
+  xmlFilename: string,
+  xsdFile: File,
+): Promise<ValidationResult> {
+  const form = new FormData()
+  form.append('xml_file', new Blob([xml], { type: 'application/xml' }), xmlFilename)
+  form.append('xsd_file', xsdFile)
+  const res = await fetch(`${BASE}/validate/upload`, { method: 'POST', body: form })
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(`Validation failed ${res.status}: ${text}`)
+  }
+  return res.json() as Promise<ValidationResult>
+}
+
 // ── Artifacts (Schemas & Transforms) ─────────────────────────────────────────
 
 /** GET /schemas — list all XSD schema filenames */
@@ -484,6 +533,16 @@ export async function getSchemas(): Promise<SchemaFile[]> {
 /** GET /schemas/{filename} — download a schema file */
 export async function downloadSchema(filename: string): Promise<void> {
   return downloadFile(`/schemas/${filename}`, filename)
+}
+
+/** GET /schemas/{filename} — fetch raw XSD content as text (for in-app preview). */
+export async function fetchSchemaContent(filename: string): Promise<string> {
+  const res = await fetch(`${BASE}/schemas/${encodeURIComponent(filename)}`)
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(`Failed to load schema ${res.status}: ${text}`)
+  }
+  return res.text()
 }
 
 /**

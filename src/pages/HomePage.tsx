@@ -1,40 +1,56 @@
 import { Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { ArrowRight, CheckCircle2, FileCode2, Shuffle, Download } from 'lucide-react'
+import { getBuilds, buildHasTransforms, normCanonicalId } from '../services/api'
+import type { Build } from '../services/api'
 import cocoLogo from '../assets/coco.png'
 
+// `canonicalName` matches the API's canonical_name so transform availability is resolved live
+// (no longer hardcoded). `transformLabel` is a curated display name shown when available.
 const SCHEMAS = [
   {
     name: 'Roster',
     file: 'Roster.xsd',
+    canonicalName: 'roster',
     description: 'Health plan member and patient demographics, coverage identifiers, addresses, and related persons.',
-    transform: 'FHIR Patient',
+    transformLabel: 'FHIR Patient',
   },
   {
     name: 'EOB',
     file: 'EOB.xsd',
+    canonicalName: 'eob',
     description: 'Explanation of Benefits: claims, adjudication, line items, and cost-sharing data.',
-    transform: null,
+    transformLabel: 'FHIR ExplanationOfBenefit',
   },
   {
     name: 'Formulary',
     file: 'Formulary.xsd',
+    canonicalName: 'formulary',
     description: 'Drug formulary entries, coverage tiers, prior authorization requirements, and medication plans.',
-    transform: null,
+    transformLabel: 'FHIR Formulary',
   },
   {
     name: 'Provider Directory',
     file: 'Provider-Directory.xsd',
+    canonicalName: 'providerdirectory',
     description:
       'Practitioner and organization rows in one canonical file — NPIs, specialties, locations, networks, affiliations.',
-    transform: 'FHIR Provider (multi-resource)',
+    transformLabel: 'FHIR Provider (multi-resource)',
   },
   {
     name: 'Clinical',
     file: 'Clinical.xsd',
+    canonicalName: 'clinical',
     description: 'Clinical patient data including diagnoses, procedures, encounters, and observations.',
-    transform: null,
+    transformLabel: 'FHIR Clinical (multi-resource)',
   },
 ]
+
+/** Schema has at least one build with an XSLT in the live API config. */
+function schemaHasTransforms(builds: Build[], canonicalName: string): boolean {
+  const want = normCanonicalId(canonicalName)
+  return builds.some((b) => normCanonicalId(b.canonical_name) === want && buildHasTransforms(b))
+}
 
 const HOW_IT_WORKS = [
   {
@@ -61,6 +77,12 @@ const HOW_IT_WORKS = [
 ]
 
 export default function HomePage() {
+  const { data: builds = [], isPending: buildsLoading } = useQuery({
+    queryKey: ['coco-sample-builds'],
+    queryFn: getBuilds,
+    staleTime: 60_000,
+  })
+
   return (
     <div className="min-h-full">
       {/* Hero */}
@@ -140,7 +162,7 @@ export default function HomePage() {
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {HOW_IT_WORKS.map(({ step, icon: Icon, title, description }) => (
-              <div key={step} className="card p-5">
+              <div key={step} className="card p-5 hover:shadow-md hover:border-gray-300 transition-all">
                 <div className="flex items-start gap-3 mb-3">
                   <span
                     className="text-xs font-bold tabular-nums"
@@ -181,17 +203,23 @@ export default function HomePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {SCHEMAS.map(({ name, file, description, transform }) => (
+                {SCHEMAS.map(({ name, file, canonicalName, description, transformLabel }) => {
+                  const available = buildsLoading
+                    ? null
+                    : schemaHasTransforms(builds, canonicalName)
+                  return (
                   <tr key={name} className="hover:bg-gray-50/50 transition-colors">
                     <td className="px-5 py-3.5 font-semibold text-gray-900">{name}</td>
                     <td className="px-5 py-3.5">
                       <span className="badge-xsd font-mono">{file}</span>
                     </td>
                     <td className="px-5 py-3.5">
-                      {transform ? (
+                      {available === null ? (
+                        <span className="text-gray-300 text-xs">…</span>
+                      ) : available ? (
                         <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700">
                           <CheckCircle2 className="w-3.5 h-3.5" />
-                          {transform}
+                          {transformLabel ?? 'Available'}
                         </span>
                       ) : (
                         <span className="text-gray-300 text-xs">—</span>
@@ -201,7 +229,8 @@ export default function HomePage() {
                       {description}
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
