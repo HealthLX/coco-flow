@@ -10,51 +10,44 @@ Web application for [CoCo canonical data models](https://github.com/HealthLX/coc
 
 ## Local Development
 
-### Option 1 — Easiest (Docker)
+### Option 1 — Two terminals (recommended)
 
-If you just want to use or demo coco-flow locally, you don’t need to install Python or clone `coco-canonical`.
+The fastest way to develop. Run coco-canonical and coco-flow separately — changes to either repo reload instantly, no Docker or rebuilds needed.
 
-From the `coco-flow` directory:
+**Terminal 1 — start the FastAPI backend:**
+```bash
+cd coco-canonical
+pip install ‘.[api]’          # once
+uvicorn api.main:app --reload --port 8000
+```
+
+**Terminal 2 — start the React frontend:**
+```bash
+cd coco-flow
+npm install                   # once
+npm run dev
+```
+
+Open **http://localhost:5173** — Vite proxies `/api/*` to FastAPI on port 8000 automatically.
+
+---
+
+### Option 2 — Docker (local)
+
+Always build with `--no-cache` locally to ensure you get the latest `coco-canonical` from GitHub:
 
 ```bash
 docker compose build --no-cache
 docker compose up -d
 ```
 
-Then open:
+Open **http://localhost:3000**
 
-```text
-http://localhost:3000
-```
-
-This runs the full stack (frontend + Express + FastAPI from `coco-canonical`) inside a single container.
-
-To stop it:
+To stop:
 
 ```bash
 docker compose down
 ```
-
-### Option 2 — Frontend-only dev (Vite)
-
-If you are working on the React UI and want hot-reload:
-
-**Prerequisite:** Node.js 18+
-
-```bash
-# install dependencies once
-npm install
-
-# start Vite dev server
-npm run dev
-```
-
-Vite will serve the app on **http://localhost:5173** and proxy `/api/*` to whatever `FASTAPI_URL` you configure (default `http://localhost:8000`).
-
-For a backend during frontend dev you can either:
-
-- Keep the Docker container running and point Vite at it, or
-- Run a separate `coco-canonical` FastAPI instance (see that repo’s README for details).
 
 ---
 
