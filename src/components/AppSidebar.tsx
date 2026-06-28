@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { LayoutDashboard, Zap, FileCode2, History, Activity } from 'lucide-react'
+import { LayoutDashboard, Zap, FileCode2, Network, History, Activity } from 'lucide-react'
 import { checkHealth } from '../services/api'
 import cocoLogo from '../assets/coco.png'
 
@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
   { to: '/workspace', label: 'Workspace', icon: Zap, end: false },
   { to: '/schemas', label: 'Schemas', icon: FileCode2, end: false },
+  { to: '/designer', label: 'Designer', icon: Network, end: false },
   { to: '/history', label: 'History', icon: History, end: false },
 ]
 

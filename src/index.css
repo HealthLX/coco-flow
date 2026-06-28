@@ -93,3 +93,324 @@
     @apply text-amber-400;
   }
 }
+
+/* ───────── XSD Design diagram (Oxygen-style graph) ───────── */
+
+/* Pan/zoom canvas */
+.xsd-pz-viewport {
+  position: relative;
+  overflow: hidden;
+  cursor: grab;
+  background-color: #fbfcfe;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.xsd-pz-viewport.is-panning {
+  cursor: grabbing;
+}
+.xsd-pz-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.xsd-diagram {
+  --xsd-line: #b6c2d4;
+  --xsd-seg: 48px;
+  padding: 24px 32px;
+  width: max-content;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+@keyframes xsd-node-in {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.xsd-drow {
+  display: flex;
+  align-items: center;
+}
+
+/* Node cell: box with an absolutely-positioned doc bubble below it, so the
+   doc never shifts the box's vertical center (keeps connectors aligned). */
+.xsd-dcell {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.xsd-dbox {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  min-width: 116px;
+  border: 1.5px solid #b9c2cf;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 27, 42, 0.06);
+  cursor: default;
+  transition: box-shadow 0.14s ease, border-color 0.14s ease, transform 0.14s ease;
+}
+.xsd-dbox.is-optional {
+  border-style: dashed;
+}
+.xsd-dbox.is-expandable {
+  cursor: pointer;
+}
+.xsd-dbox:hover {
+  border-color: #94a3b8;
+  box-shadow: 0 4px 14px rgba(15, 27, 42, 0.14);
+}
+.xsd-dbox.is-expandable:hover {
+  border-color: var(--coco-red, #c0392b);
+}
+.xsd-dbox.is-root .xsd-dname {
+  background: linear-gradient(#1a2e42, #0d1b2a);
+  color: #fff;
+  border-radius: 6px;
+}
+
+.xsd-dname {
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: 'Fira Code', 'Cascadia Code', monospace;
+  color: #1e3a5f;
+  background: linear-gradient(#eaf2ff, #d3e3ff);
+  border-radius: 6px 6px 0 0;
+  white-space: nowrap;
+}
+.xsd-dbox.is-leaf .xsd-dname {
+  border-radius: 6px;
+}
+
+.xsd-dtype {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  font-size: 11.5px;
+  border-top: 1px solid #e5e9f0;
+}
+.xsd-dtype-label {
+  color: #94a3b8;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 9px;
+}
+.xsd-dtype-value {
+  font-family: 'Fira Code', 'Cascadia Code', monospace;
+  color: #475569;
+}
+
+/* +/- expand control hanging off the box's right edge */
+.xsd-dtoggle {
+  position: absolute;
+  right: -9px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1.5px solid #b9c2cf;
+  background: #fff;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 2;
+}
+.xsd-dtoggle:hover {
+  border-color: var(--coco-red, #c0392b);
+  color: #c0392b;
+}
+
+.xsd-denum {
+  margin-top: 2px;
+  padding: 2px 10px 4px;
+  font-size: 9.5px;
+  color: #059669;
+  font-family: 'Fira Code', monospace;
+}
+
+/* Documentation sticky-note bubble — revealed on hover, floats above siblings */
+.xsd-ddoc {
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 0;
+  width: max-content;
+  max-width: 230px;
+  padding: 6px 9px;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: #6b6450;
+  background: #fffdf3;
+  border: 1px solid #ece4c7;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(15, 27, 42, 0.12);
+  pointer-events: none;
+  z-index: 40;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-3px);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.xsd-dcell:hover {
+  z-index: 41;
+}
+.xsd-dcell:hover .xsd-ddoc {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+/* Lift the whole hovered row unit above sibling rows so the doc bubble paints
+   over the boxes beneath it (siblings stack in tree order otherwise). */
+.xsd-dchildwrap:hover {
+  z-index: 30;
+}
+
+/* Small amber marker showing a node carries documentation */
+.xsd-dname-doc {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 7px;
+  border-radius: 50%;
+  background: #e0a23b;
+  vertical-align: middle;
+}
+
+/* Compositor (sequence / choice) connector node */
+.xsd-dcomp {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--xsd-seg);
+}
+.xsd-dcomp::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: var(--xsd-seg);
+  border-top: 2px solid var(--xsd-line);
+}
+.xsd-dcomp::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: var(--xsd-seg);
+  border-top: 2px solid var(--xsd-line);
+}
+/* Lead compositor (a choice sitting as a child) — parent stub already draws
+   its left connector, so suppress the left segment. */
+.xsd-dcomp.is-lead {
+  padding-left: 0;
+}
+.xsd-dcomp.is-lead::before {
+  display: none;
+}
+.xsd-dcomp.is-collapsed::after {
+  display: none;
+}
+
+.xsd-dcomp-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: radial-gradient(circle at 35% 28%, #fffbe8, #ffe9a8);
+  border: 1.5px solid #d8b75a;
+  color: #6b551b;
+  cursor: pointer;
+  z-index: 1;
+  box-shadow: 0 1px 2px rgba(15, 27, 42, 0.08);
+  transition: box-shadow 0.14s ease, border-color 0.14s ease, transform 0.14s ease;
+}
+.xsd-dcomp-icon:hover {
+  border-color: #b8860b;
+  box-shadow: 0 3px 8px rgba(184, 134, 11, 0.25);
+  transform: scale(1.06);
+}
+.xsd-dcomp-icon.is-choice {
+  background: radial-gradient(circle at 35% 28%, #ffeede, #ffd0a3);
+  border-color: #e0944a;
+  color: #8a4a14;
+}
+.xsd-dcomp-icon.is-choice:hover {
+  border-color: #c2691f;
+  box-shadow: 0 3px 8px rgba(194, 105, 31, 0.25);
+}
+
+/* Vertical bus + horizontal stubs to each child */
+.xsd-dchildren {
+  display: flex;
+  flex-direction: column;
+}
+.xsd-dchildwrap {
+  position: relative;
+  /* Vertical spacing via padding (not margin) so the bus border below is
+     continuous between siblings instead of leaving gaps. */
+  padding: 11px 0 11px var(--xsd-seg);
+  animation: xsd-node-in 0.18s ease both;
+}
+.xsd-dchildwrap::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: var(--xsd-seg);
+  border-top: 2px solid var(--xsd-line);
+}
+.xsd-dchildwrap::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-left: 2px solid var(--xsd-line);
+}
+.xsd-dchildwrap:first-child::after {
+  top: 50%;
+}
+.xsd-dchildwrap:last-child::after {
+  bottom: 50%;
+}
+.xsd-dchildwrap:only-child::after {
+  display: none;
+}
+
+/* Cardinality label riding above the stub near the bus */
+.xsd-dcard {
+  position: absolute;
+  left: 3px;
+  top: 50%;
+  transform: translateY(-150%);
+  font-size: 9.5px;
+  font-family: 'Fira Code', monospace;
+  color: #94a3b8;
+  background: #fff;
+  padding: 0 2px;
+  z-index: 1;
+}

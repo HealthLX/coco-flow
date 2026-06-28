@@ -3,6 +3,7 @@ import AppSidebar from './components/AppSidebar'
 import HomePage from './pages/HomePage'
 import WorkspacePage from './pages/WorkspacePage'
 import SchemasPage from './pages/SchemasPage'
+import DesignerPage from './pages/DesignerPage'
 import HistoryPage from './pages/HistoryPage'
 
 function Layout() {
@@ -14,6 +15,7 @@ function Layout() {
           <Route path="/" element={<HomePage />} />
           <Route path="/workspace" element={<WorkspacePage />} />
           <Route path="/schemas" element={<SchemasPage />} />
+          <Route path="/designer" element={<DesignerPage />} />
           <Route path="/history" element={<HistoryPage />} />
           <Route path="*" element={<HomePage />} />
         </Routes>

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { FileCode2, Download, AlertCircle } from 'lucide-react'
 import { getSchemas, getTransforms, fetchSchemaContent, downloadSchema } from '../services/api'
 import XmlPreview from '../components/XmlPreview'
+import XsdTreeView from '../components/XsdTreeView'
 
 /** Map a schema filename (e.g. "Provider-Directory.xsd") to its transforms folder name. */
 function schemaGroup(filename: string): string {
@@ -22,11 +23,20 @@ export default function SchemasPage() {
   })
 
   const [selected, setSelected] = useState<string | null>(null)
+  const [schemaView, setSchemaView] = useState<'source' | 'tree'>('tree')
 
   const { data: content, isFetching: contentLoading, isError: contentError } = useQuery({
     queryKey: ['schema-content', selected],
     queryFn: () => fetchSchemaContent(selected as string),
     enabled: !!selected,
+    staleTime: 60_000,
+  })
+
+  // Imported simpleType schema, so `core:` type references resolve in the tree view.
+  // Best-effort: the tree still works if it can't be loaded.
+  const { data: coreContent } = useQuery({
+    queryKey: ['schema-content', 'Core-Model.xsd'],
+    queryFn: () => fetchSchemaContent('Core-Model.xsd'),
     staleTime: 60_000,
   })
 
@@ -109,13 +119,30 @@ export default function SchemasPage() {
                     </span>
                   )}
                 </div>
-                <button
-                  onClick={() => downloadSchema(selected)}
-                  className="btn-secondary text-xs"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Download XSD
-                </button>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center rounded border border-gray-200 overflow-hidden">
+                    {(['source', 'tree'] as const).map((v) => (
+                      <button
+                        key={v}
+                        onClick={() => setSchemaView(v)}
+                        className={`px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition-colors ${
+                          schemaView === v
+                            ? 'bg-coco-red text-white'
+                            : 'bg-white text-gray-500 hover:text-gray-700'
+                        }`}
+                      >
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => downloadSchema(selected)}
+                    className="btn-secondary text-xs"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Download XSD
+                  </button>
+                </div>
               </div>
 
               {contentLoading && (
@@ -127,9 +154,12 @@ export default function SchemasPage() {
                   Could not load this schema file.
                 </div>
               )}
-              {content && (
-                <XmlPreview content={content} title={selected} badgeClass="badge-xsd" badgeLabel="XSD" />
-              )}
+              {content &&
+                (schemaView === 'tree' ? (
+                  <XsdTreeView xsd={content} coreXsd={coreContent} title={selected} />
+                ) : (
+                  <XmlPreview content={content} title={selected} badgeClass="badge-xsd" badgeLabel="XSD" />
+                ))}
 
               {groupTransforms.length > 0 && (
                 <div className="card overflow-hidden">
