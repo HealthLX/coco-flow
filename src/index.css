@@ -86,7 +86,7 @@
   }
 
   .status-info {
-    @apply text-gray-500;
+    @apply text-gray-900;
   }
 
   .status-pending {
