@@ -5,11 +5,15 @@ import { getSchemas, fetchSchemaContent } from '../services/api'
 import XsdDiagram from '../components/XsdDiagram'
 
 export default function DesignerPage() {
-  const { data: schemas = [], isPending, isError, error } = useQuery({
+  const { data: allSchemas = [], isPending, isError, error } = useQuery({
     queryKey: ['schemas'],
     queryFn: getSchemas,
     staleTime: 60_000,
   })
+
+  // Core-Model.xsd is a shared type library (no root element to diagram); it's
+  // still loaded below so `core:` types resolve inside the other schemas.
+  const schemas = allSchemas.filter((s) => s.filename.toLowerCase() !== 'core-model.xsd')
 
   const [selected, setSelected] = useState<string | null>(null)
 

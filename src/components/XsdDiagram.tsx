@@ -248,6 +248,15 @@ export default function XsdDiagram({ xsd, coreXsd, title }: XsdDiagramProps) {
           <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
           {parsed.error}
         </div>
+      ) : parsed.roots.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+          <AlertCircle className="w-8 h-8 text-gray-300 mb-3" />
+          <p className="text-sm text-gray-500 font-medium">No root element to diagram</p>
+          <p className="text-xs text-gray-400 mt-1 max-w-xs">
+            This schema defines shared types only (no top-level element), so there's nothing to
+            chart. Open it in the Schemas tab to view its source.
+          </p>
+        </div>
       ) : (
         <div
           ref={viewportRef}
