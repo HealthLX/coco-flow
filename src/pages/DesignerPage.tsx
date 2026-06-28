@@ -32,7 +32,7 @@ export default function DesignerPage() {
       {/* Title + horizontal schema selector — frees the full width below for the diagram */}
       <div className="flex-none space-y-2.5">
         <div className="flex items-baseline gap-3 flex-wrap">
-          <h1 className="text-xl font-bold text-gray-900">Schema Designer</h1>
+          <h1 className="text-xl font-bold text-gray-900">Schema Explorer</h1>
           <p className="text-sm text-gray-500">
             Explore the CoCo canonical XSD schemas (v10.0) as an interactive element diagram.
           </p>
