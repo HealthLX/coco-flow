@@ -225,7 +225,7 @@ export default function XsdDiagram({ xsd, coreXsd, title }: XsdDiagramProps) {
           <span className="badge-xsd">Diagram</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="text-[11px] text-gray-400 mr-1 tabular-nums">
+          <span className="text-[11px] text-gray-500 mr-1 tabular-nums">
             {Math.round(view.scale * 100)}%
           </span>
           <ToolbarButton onClick={() => zoomBy(1 / 1.2)} label="Zoom out">
@@ -250,9 +250,9 @@ export default function XsdDiagram({ xsd, coreXsd, title }: XsdDiagramProps) {
         </div>
       ) : parsed.roots.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
-          <AlertCircle className="w-8 h-8 text-gray-300 mb-3" />
-          <p className="text-sm text-gray-500 font-medium">No root element to diagram</p>
-          <p className="text-xs text-gray-400 mt-1 max-w-xs">
+          <AlertCircle className="w-8 h-8 text-gray-400 mb-3" />
+          <p className="text-sm text-gray-600 font-medium">No root element to diagram</p>
+          <p className="text-xs text-gray-500 mt-1 max-w-xs">
             This schema defines shared types only (no top-level element), so there's nothing to
             chart. Open it in the Schemas tab to view its source.
           </p>
@@ -309,7 +309,7 @@ function ToolbarButton({
       onClick={onClick}
       title={label}
       aria-label={label}
-      className="flex items-center justify-center w-7 h-7 rounded text-gray-500 hover:text-gray-800 hover:bg-gray-200/70 transition-colors"
+      className="flex items-center justify-center w-7 h-7 rounded text-gray-600 hover:text-gray-800 hover:bg-gray-200/70 transition-colors"
     >
       {children}
     </button>
@@ -419,7 +419,7 @@ function DiagramNode({ node, parsed, depth, defaultExpanded = false }: DiagramNo
 
       {expandable && expanded && (
         <>
-          <div className="xsd-dcomp" onClick={toggle} title="sequence — click to collapse">
+          <div className="xsd-dcomp" onClick={toggle} title="sequence (click to collapse)">
             <span className="xsd-dcomp-icon" aria-label="sequence">
               <SequenceIcon />
             </span>

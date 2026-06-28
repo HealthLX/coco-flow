@@ -51,7 +51,7 @@ const CANONICALS: CanonicalDef[] = [
     name: 'eob',
     label: 'EOB',
     schemaFile: 'EOB.xsd',
-    description: 'Explanation of Benefits — claims and adjudication data',
+    description: 'Explanation of Benefits: claims and adjudication data',
   },
   {
     name: 'formulary',
@@ -64,7 +64,7 @@ const CANONICALS: CanonicalDef[] = [
     label: 'Provider Directory',
     schemaFile: 'Provider-Directory.xsd',
     description:
-      'Practitioner and organization providers in one canonical file — NPIs, specialties, networks',
+      'Practitioner and organization providers in one canonical file: NPIs, specialties, networks',
   },
   {
     name: 'clinical',
@@ -275,7 +275,7 @@ export default function WorkspacePage() {
       }
       setValidationResult(result)
       addToHistory({
-        label: `${displayName} — XSD ${result.valid ? 'valid' : `${result.error_count} issue(s)`}`,
+        label: `${displayName}: XSD ${result.valid ? 'valid' : `${result.error_count} issue(s)`}`,
         actionType: 'validated',
         fileType: 'canonical',
         serverFilename: null,
@@ -354,7 +354,7 @@ export default function WorkspacePage() {
     <div className="max-w-4xl mx-auto px-8 py-8 space-y-6">
       <div>
         <h1 className="text-xl font-bold text-gray-900">Workspace</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
+        <p className="text-sm text-gray-600 mt-0.5">
           Select a schema, generate a sample, and optionally transform to FHIR.
         </p>
       </div>
@@ -386,7 +386,7 @@ export default function WorkspacePage() {
             className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
               selectorTab === 'predefined'
                 ? 'border-coco-red text-coco-red'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                : 'border-transparent text-gray-600 hover:text-gray-700'
             }`}
           >
             CoCo Canonical Schemas
@@ -396,7 +396,7 @@ export default function WorkspacePage() {
             className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
               selectorTab === 'custom'
                 ? 'border-coco-red text-coco-red'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                : 'border-transparent text-gray-600 hover:text-gray-700'
             }`}
           >
             Upload Custom XSD
@@ -410,11 +410,11 @@ export default function WorkspacePage() {
             {/* Header row */}
             <div className="grid grid-cols-[auto_1fr_auto_auto] gap-4 px-5 py-2.5 bg-gray-50 border-b border-gray-100">
               <div className="w-5" />
-              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Schema</div>
-              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider w-28 text-right">
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Schema</div>
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider w-28 text-right">
                 FHIR Transform
               </div>
-              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider w-44 text-right">
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider w-44 text-right">
                 XSD File
               </div>
             </div>
@@ -455,20 +455,20 @@ export default function WorkspacePage() {
                     >
                       {c.label}
                     </div>
-                    <div className="text-xs text-gray-400 mt-0.5">{c.description}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">{c.description}</div>
                   </div>
 
                   {/* Transform badge */}
                   <div className="w-28 flex justify-end">
                     {xform === null ? (
-                      <span className="text-xs text-gray-400">…</span>
+                      <span className="text-xs text-gray-500">…</span>
                     ) : xform ? (
                       <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 whitespace-nowrap">
                         <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
                         Available
                       </span>
                     ) : (
-                      <span className="text-xs text-gray-300">—</span>
+                      <span className="text-xs text-gray-400">—</span>
                     )}
                   </div>
 
@@ -495,7 +495,7 @@ export default function WorkspacePage() {
         {/* Custom XSD */}
         {selectorTab === 'custom' && (
           <div className="px-5 py-5">
-            <p className="text-xs text-gray-500 mb-5">
+            <p className="text-xs text-gray-600 mb-5">
               Upload any XSD schema to generate a synthetic sample XML. You can also upload a
               custom XSLT in the transform step.
             </p>
@@ -514,7 +514,7 @@ export default function WorkspacePage() {
                   className="block w-full text-xs text-gray-600 file:mr-2 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-medium file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200 cursor-pointer border border-gray-200 rounded px-2 py-1"
                 />
                 {xsdFile && (
-                  <p className="text-xs text-gray-400 mt-1">
+                  <p className="text-xs text-gray-500 mt-1">
                     Selected: <span className="font-medium text-gray-600">{xsdFile.name}</span>
                   </p>
                 )}
@@ -528,9 +528,9 @@ export default function WorkspacePage() {
                   value={rootElement}
                   onChange={(e) => setRootElement(e.target.value)}
                   placeholder="e.g. roster"
-                  className="w-full text-sm border border-gray-200 rounded px-3 py-2 focus:outline-none focus:border-coco-red focus:ring-1 focus:ring-coco-red placeholder:text-gray-300"
+                  className="w-full text-sm border border-gray-200 rounded px-3 py-2 focus:outline-none focus:border-coco-red focus:ring-1 focus:ring-coco-red placeholder:text-gray-400"
                 />
-                <p className="text-[11px] text-gray-400 mt-1">
+                <p className="text-[11px] text-gray-500 mt-1">
                   The root element defined in your XSD schema
                 </p>
               </div>
@@ -567,7 +567,7 @@ export default function WorkspacePage() {
             )}
           </button>
           {!canGenerate && !generating && (
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-gray-500">
               {selectorTab === 'predefined'
                 ? 'Select a schema above to continue'
                 : 'Upload an XSD file and enter a root element name'}
@@ -607,7 +607,7 @@ export default function WorkspacePage() {
               3
             </div>
             <h2 className="text-sm font-semibold text-gray-800">Validate against XSD</h2>
-            <span className="text-xs text-gray-400">(optional)</span>
+            <span className="text-xs text-gray-500">(optional)</span>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
@@ -633,8 +633,8 @@ export default function WorkspacePage() {
                 </>
               )}
             </button>
-            <span className="text-xs text-gray-400">
-              Checks schema conformance — structure, data types, and required elements.
+            <span className="text-xs text-gray-500">
+              Checks schema conformance: structure, data types, and required elements.
             </span>
           </div>
 
@@ -660,7 +660,7 @@ export default function WorkspacePage() {
               4
             </div>
             <h2 className="text-sm font-semibold text-gray-800">Transform to FHIR</h2>
-            <span className="text-xs text-gray-400">(optional)</span>
+            <span className="text-xs text-gray-500">(optional)</span>
           </div>
 
           <div className="space-y-4">
@@ -697,17 +697,17 @@ export default function WorkspacePage() {
                     )}
                   </button>
                   {!activeTransform && !buildsLoading && (
-                    <span className="text-xs text-gray-500 bg-gray-100 border border-gray-200 rounded px-2.5 py-1 flex items-center gap-1.5">
-                      <AlertCircle className="w-3.5 h-3.5 text-gray-400" />
-                      No built-in transform — upload a custom XSLT below
+                    <span className="text-xs text-gray-600 bg-gray-100 border border-gray-200 rounded px-2.5 py-1 flex items-center gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5 text-gray-500" />
+                      No built-in transform. Upload a custom XSLT below.
                     </span>
                   )}
                   {buildsLoading && (
-                    <span className="text-xs text-gray-400">Loading transform configuration…</span>
+                    <span className="text-xs text-gray-500">Loading transform configuration…</span>
                   )}
                 </div>
                 {hasGenerated && activeTransform && xsltCountForSelection > 0 && (
-                  <p className="text-[11px] text-gray-500 pl-0.5">
+                  <p className="text-[11px] text-gray-600 pl-0.5">
                     Includes {xsltCountForSelection} FHIR resource output
                     {xsltCountForSelection === 1 ? '' : 's'} in one combined response.
                   </p>
@@ -724,9 +724,9 @@ export default function WorkspacePage() {
                 <Upload className="w-4 h-4" />
                 Upload custom XSLT
                 {showXsltUpload ? (
-                  <ChevronUp className="w-3.5 h-3.5 text-gray-400" />
+                  <ChevronUp className="w-3.5 h-3.5 text-gray-500" />
                 ) : (
-                  <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+                  <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
                 )}
               </button>
 

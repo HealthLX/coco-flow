@@ -57,7 +57,7 @@ export default function XmlPreview({
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-gray-700">{title}</span>
           {badgeClass && badgeLabel && <span className={badgeClass}>{badgeLabel}</span>}
-          <span className="text-xs text-gray-400">{lines.length} lines</span>
+          <span className="text-xs text-gray-500">{lines.length} lines</span>
         </div>
         <div className="flex items-center gap-2">
           {allowJson && jsonContent && (
@@ -72,7 +72,7 @@ export default function XmlPreview({
                   className={`px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide transition-colors ${
                     view === v
                       ? 'bg-coco-red text-white'
-                      : 'bg-white text-gray-500 hover:text-gray-700'
+                      : 'bg-white text-gray-600 hover:text-gray-700'
                   }`}
                 >
                   {v}
@@ -82,7 +82,7 @@ export default function XmlPreview({
           )}
           <button
             onClick={copy}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium text-gray-600 hover:text-gray-700 hover:bg-gray-100 transition-colors"
           >
             {copied ? (
               <>
@@ -101,7 +101,7 @@ export default function XmlPreview({
 
       {showingJson && (
         <div className="px-4 py-1.5 text-[11px] text-amber-700 bg-amber-50 border-b border-amber-100">
-          Structural JSON view — not spec-canonical FHIR JSON. Conformant FHIR JSON comes from the
+          Structural JSON view, not spec-canonical FHIR JSON. Conformant FHIR JSON comes from the
           HealthLX mappings.
         </div>
       )}
@@ -112,7 +112,7 @@ export default function XmlPreview({
       >
         {displayContent}
         {isLong && !expanded && (
-          <span className="block text-gray-400 italic mt-1">
+          <span className="block text-gray-500 italic mt-1">
             … {lines.length - COLLAPSED_LINES} more lines hidden
           </span>
         )}
@@ -121,7 +121,7 @@ export default function XmlPreview({
       {isLong && (
         <button
           onClick={() => setExpanded((v) => !v)}
-          className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-50 border-t border-gray-100 transition-colors"
+          className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-gray-600 hover:text-gray-700 hover:bg-gray-50 border-t border-gray-100 transition-colors"
         >
           {expanded ? (
             <>

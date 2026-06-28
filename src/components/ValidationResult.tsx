@@ -24,7 +24,7 @@ export default function ValidationResult({ result }: ValidationResultProps) {
         <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-red-600" />
         <div>
           <span className="font-semibold">Invalid</span> against{' '}
-          <span className="font-mono">{result.schema}</span> — {result.error_count} issue
+          <span className="font-mono">{result.schema}</span>: {result.error_count} issue
           {result.error_count === 1 ? '' : 's'} found.
         </div>
       </div>

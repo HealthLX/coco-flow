@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowRight, CheckCircle2, FileCode2, Shuffle, Download } from 'lucide-react'
+import { ArrowRight, CheckCircle2, FileCode2, Shuffle, Download, Github, BookOpen, ExternalLink } from 'lucide-react'
 import { getBuilds, buildHasTransforms, normCanonicalId } from '../services/api'
 import type { Build } from '../services/api'
 import cocoLogo from '../assets/coco.png'
@@ -34,7 +34,7 @@ const SCHEMAS = [
     file: 'Provider-Directory.xsd',
     canonicalName: 'providerdirectory',
     description:
-      'Practitioner and organization rows in one canonical file — NPIs, specialties, locations, networks, affiliations.',
+      'Practitioner and organization rows in one canonical file: NPIs, specialties, locations, networks, affiliations.',
     transformLabel: 'FHIR Provider (multi-resource)',
   },
   {
@@ -157,7 +157,7 @@ export default function HomePage() {
       <div className="w-full max-w-5xl mx-auto px-6 sm:px-10 py-10">
         {/* How it works */}
         <section className="mb-12">
-          <h2 className="text-xs font-bold tracking-[0.15em] uppercase text-gray-400 mb-6">
+          <h2 className="text-xs font-bold tracking-[0.15em] uppercase text-gray-500 mb-6">
             How it works
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -170,10 +170,10 @@ export default function HomePage() {
                   >
                     {step}
                   </span>
-                  <Icon className="w-4 h-4 text-gray-400 mt-0.5" />
+                  <Icon className="w-4 h-4 text-gray-500 mt-0.5" />
                 </div>
                 <div className="text-sm font-semibold text-gray-900 mb-1.5">{title}</div>
-                <div className="text-xs text-gray-500 leading-relaxed">{description}</div>
+                <div className="text-xs text-gray-600 leading-relaxed">{description}</div>
               </div>
             ))}
           </div>
@@ -181,23 +181,23 @@ export default function HomePage() {
 
         {/* Canonical schemas */}
         <section>
-          <h2 className="text-xs font-bold tracking-[0.15em] uppercase text-gray-400 mb-4">
+          <h2 className="text-xs font-bold tracking-[0.15em] uppercase text-gray-500 mb-4">
             Canonical Schemas (v10.0)
           </h2>
           <div className="card overflow-hidden">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50 text-left">
-                  <th className="px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  <th className="px-5 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">
                     Schema
                   </th>
-                  <th className="px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  <th className="px-5 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">
                     XSD File
                   </th>
-                  <th className="px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  <th className="px-5 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">
                     FHIR Transform
                   </th>
-                  <th className="px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider hidden lg:table-cell">
+                  <th className="px-5 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider hidden lg:table-cell">
                     Description
                   </th>
                 </tr>
@@ -215,17 +215,17 @@ export default function HomePage() {
                     </td>
                     <td className="px-5 py-3.5">
                       {available === null ? (
-                        <span className="text-gray-300 text-xs">…</span>
+                        <span className="text-gray-400 text-xs">…</span>
                       ) : available ? (
                         <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700">
                           <CheckCircle2 className="w-3.5 h-3.5" />
                           {transformLabel ?? 'Available'}
                         </span>
                       ) : (
-                        <span className="text-gray-300 text-xs">—</span>
+                        <span className="text-gray-400 text-xs">—</span>
                       )}
                     </td>
-                    <td className="px-5 py-3.5 text-xs text-gray-500 hidden lg:table-cell max-w-sm">
+                    <td className="px-5 py-3.5 text-xs text-gray-600 hidden lg:table-cell max-w-sm">
                       {description}
                     </td>
                   </tr>
@@ -236,7 +236,7 @@ export default function HomePage() {
           </div>
 
           <div className="mt-5 flex items-center justify-between">
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-gray-500">
               Full FHIR mapping bindings for Smile, Health Samurai, and Firely are available
               commercially through{' '}
               <a
@@ -256,6 +256,51 @@ export default function HomePage() {
               Go to Workspace
               <ArrowRight className="w-3.5 h-3.5" />
             </Link>
+          </div>
+        </section>
+
+        {/* Resources */}
+        <section className="mt-12">
+          <h2 className="text-xs font-bold tracking-[0.15em] uppercase text-gray-500 mb-4">
+            Resources
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <a
+              href="https://github.com/HealthLX/coco-canonical"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="card p-5 flex items-start gap-3 hover:shadow-md hover:border-gray-300 transition-all group"
+            >
+              <Github className="w-5 h-5 text-gray-700 flex-shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 text-sm font-semibold text-gray-900 mb-1">
+                  coco-canonical
+                  <ExternalLink className="w-3 h-3 text-gray-500 group-hover:text-coco-red transition-colors" />
+                </div>
+                <div className="text-xs text-gray-600 leading-relaxed">
+                  Source repository for the canonical XSD schemas and XSLT transforms. For
+                  developers working with or contributing to the CoCo data models.
+                </div>
+              </div>
+            </a>
+            <a
+              href="https://healthlx.github.io/coco-canonical/Core-model_Guide.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="card p-5 flex items-start gap-3 hover:shadow-md hover:border-gray-300 transition-all group"
+            >
+              <BookOpen className="w-5 h-5 text-gray-700 flex-shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 text-sm font-semibold text-gray-900 mb-1">
+                  Schema Documentation
+                  <ExternalLink className="w-3 h-3 text-gray-500 group-hover:text-coco-red transition-colors" />
+                </div>
+                <div className="text-xs text-gray-600 leading-relaxed">
+                  Live Core Model Guide with field-level documentation for the canonical schemas,
+                  published from the source repository.
+                </div>
+              </div>
+            </a>
           </div>
         </section>
       </div>
