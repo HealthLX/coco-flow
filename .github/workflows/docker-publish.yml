@@ -54,5 +54,5 @@ jobs:
             CACHE_BUST=${{ github.sha }}
 
       - name: Trigger Render Deploy
-        if: ${{ secrets.RENDER_DEPLOY_HOOK != '' }}
-        run: curl -f -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
+        if: ${{ env.RENDER_DEPLOY_HOOK != '' }}
+        run: curl -f -X POST "$RENDER_DEPLOY_HOOK"
