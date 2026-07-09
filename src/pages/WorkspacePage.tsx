@@ -11,6 +11,7 @@ import {
   PackageOpen,
   CheckCircle2,
   ShieldCheck,
+  HelpCircle,
 } from 'lucide-react'
 import {
   getBuilds,
@@ -20,12 +21,22 @@ import {
   transformUpload,
   validateCanonicalXml,
   validateCustomXml,
+  validateFhirXml,
+  FHIR_PROFILE_OPTIONS,
+  usCoreProfileFor,
+  pinUsCoreVersion,
+  US_CORE_VERSION,
   buildHasTransforms,
   countXsltSteps,
   normCanonicalId,
   selectProviderDirectoryBuild,
 } from '../services/api'
-import type { Build, FhirTransformResult, ValidationResult as ValidationResultData } from '../services/api'
+import type {
+  Build,
+  FhirTransformResult,
+  FhirValidationResponse,
+  ValidationResult as ValidationResultData,
+} from '../services/api'
 import { addToHistory } from '../lib/history'
 import XmlPreview from '../components/XmlPreview'
 import ValidationResult from '../components/ValidationResult'
@@ -103,6 +114,16 @@ function fhirExportBasename(canonicalName: string): string {
   return canonicalName
 }
 
+/** Root element of a FHIR XML document, e.g. "Patient". Skips the XML declaration. */
+function rootResourceType(xml: string): string | null {
+  return xml.match(/<([A-Za-z][A-Za-z0-9]*)[\s>]/)?.[1] ?? null
+}
+
+/** "…/us-core-patient|6.1.0" → "us-core-patient|6.1.0"; base-R4 label passes through. */
+function profileLabel(schema: string): string {
+  return schema.includes('/') ? (schema.split('/').pop() ?? schema) : schema
+}
+
 // ── Component ─────────────────────────────────────────────────────────────
 
 type SelectorTab = 'predefined' | 'custom'
@@ -144,6 +165,15 @@ export default function WorkspacePage() {
   const [xsltFile, setXsltFile] = useState<File | null>(null)
   const xsltInputRef = useRef<HTMLInputElement>(null)
 
+  // ── FHIR validate state ───────────────────────────────────────────────────
+  // Only custom-XSLT output lets the user pick a profile; built-in transforms use the
+  // build's configured fhir_profile. `undefined` means "no explicit pick yet".
+  const [fhirFromCustomXslt, setFhirFromCustomXslt] = useState(false)
+  const [fhirProfileChoice, setFhirProfileChoice] = useState<string | null | undefined>(undefined)
+  const [fhirValidating, setFhirValidating] = useState(false)
+  const [fhirValidateError, setFhirValidateError] = useState<string | null>(null)
+  const [fhirValidationResult, setFhirValidationResult] = useState<FhirValidationResponse | null>(null)
+
   // ── Derived values ────────────────────────────────────────────────────────
   const isPredefined = selectorTab === 'predefined'
   const canGenerate =
@@ -178,7 +208,55 @@ export default function WorkspacePage() {
     ? (CANONICALS.find((c) => c.name === selectedCanonical)?.label ?? selectedCanonical ?? '')
     : xsdFile?.name ?? 'Custom XSD'
 
+  // Profile configured for this build in sample_builds.yaml — only roster sets one.
+  const configuredFhirProfile: string | null =
+    isPredefined && selectedCanonical && !buildsLoading && !buildsError
+      ? (builds.find(
+          (b) => normCanonicalId(b.canonical_name) === normCanonicalId(selectedCanonical),
+        )?.fhir_profile ?? null)
+      : null
+
+  /** Custom XSLT: the user's pick. Built-in: the build's profile, else US Core by resource type. */
+  const profileForResource = (resourceType: string | null): string | null => {
+    if (fhirFromCustomXslt) {
+      return fhirProfileChoice === undefined ? FHIR_PROFILE_OPTIONS[0].value : fhirProfileChoice
+    }
+    if (configuredFhirProfile) return pinUsCoreVersion(configuredFhirProfile)
+    return usCoreProfileFor(resourceType)
+  }
+
+  /** What each transformed resource will be validated against, shown before you click. */
+  const plannedProfiles: { resourceType: string | null; profile: string | null }[] = !fhirResult
+    ? []
+    : fhirResult.kind === 'single'
+      ? [
+          {
+            resourceType: rootResourceType(fhirResult.xml),
+            profile: profileForResource(rootResourceType(fhirResult.xml)),
+          },
+        ]
+      : fhirResult.parts.map((p) => ({
+          resourceType: p.resourceType,
+          profile: profileForResource(p.resourceType),
+        }))
+
+  /** Resource type badge for a validated file — from the transform parts, or the XML root. */
+  const resourceTypeFor = (fileName: string): string | null => {
+    if (!fhirResult) return null
+    if (fhirResult.kind === 'multipart') {
+      return fhirResult.parts.find((p) => p.filename === fileName)?.resourceType ?? null
+    }
+    return rootResourceType(fhirResult.xml)
+  }
+
   // ── Handlers ──────────────────────────────────────────────────────────────
+
+  const resetFhirValidation = () => {
+    setFhirProfileChoice(undefined)
+    setFhirFromCustomXslt(false)
+    setFhirValidationResult(null)
+    setFhirValidateError(null)
+  }
 
   const handleTabChange = (tab: SelectorTab) => {
     setSelectorTab(tab)
@@ -190,6 +268,7 @@ export default function WorkspacePage() {
     setTransformError(null)
     setValidationResult(null)
     setValidateError(null)
+    resetFhirValidation()
   }
 
   const handleSelectCanonical = (name: string) => {
@@ -201,6 +280,7 @@ export default function WorkspacePage() {
     setTransformError(null)
     setValidationResult(null)
     setValidateError(null)
+    resetFhirValidation()
   }
 
   const handleXsdFileChange = (file: File | null) => {
@@ -287,16 +367,56 @@ export default function WorkspacePage() {
     }
   }
 
+  const handleValidateFhir = async () => {
+    if (!fhirResult) return
+    setFhirValidating(true)
+    setFhirValidateError(null)
+    setFhirValidationResult(null)
+
+    try {
+      const base = selectedCanonical ? fhirExportBasename(selectedCanonical) : 'fhir-output'
+      const files =
+        fhirResult.kind === 'single'
+          ? [
+              {
+                fileName: `${base}-fhir.xml`,
+                xml: fhirResult.xml,
+                profile: profileForResource(rootResourceType(fhirResult.xml)),
+              },
+            ]
+          : fhirResult.parts.map((p) => ({
+              fileName: p.filename,
+              xml: p.xml,
+              profile: profileForResource(p.resourceType),
+            }))
+
+      setFhirValidationResult(await validateFhirXml(files))
+      addToHistory({
+        label: `${displayName} FHIR validated`,
+        actionType: 'fhir-validated',
+        fileType: 'fhir',
+        serverFilename: null,
+      })
+    } catch (e) {
+      setFhirValidateError((e as Error).message)
+    } finally {
+      setFhirValidating(false)
+    }
+  }
+
   const handleTransform = async (useCustomXslt: boolean) => {
     if (!canonicalXml || !canonicalFilename) return
     setTransforming(true)
     setTransformError(null)
     setFhirResult(null)
+    setFhirValidationResult(null)
+    setFhirValidateError(null)
 
     try {
       if (useCustomXslt && xsltFile) {
         const fhir = await transformUpload(canonicalXml, canonicalFilename, xsltFile)
         setFhirResult({ kind: 'single', xml: fhir })
+        setFhirFromCustomXslt(true)
         addToHistory({
           label: `${displayName} → FHIR (custom XSLT)`,
           actionType: 'transformed',
@@ -306,6 +426,7 @@ export default function WorkspacePage() {
       } else if (isPredefined && selectedCanonical && activeTransform) {
         const result = await transformSampleContent(selectedCanonical)
         setFhirResult(result)
+        setFhirFromCustomXslt(false)
         const base = fhirExportBasename(selectedCanonical)
         addToHistory({
           label: `${displayName} → FHIR`,
@@ -803,12 +924,139 @@ export default function WorkspacePage() {
           />
         ))}
 
-      {/* ── Step 5: Export ── */}
-      {(hasGenerated || hasFhirOutput) && (
+      {/* ── Step 5: Validate FHIR ── */}
+      {hasFhirOutput && (
         <div className="card p-5">
           <div className="flex items-center gap-2 mb-4">
             <div className="flex h-6 w-6 items-center justify-center rounded-full bg-coco-red text-white text-xs font-bold flex-shrink-0">
               5
+            </div>
+            <h2 className="text-sm font-semibold text-gray-900">Validate FHIR</h2>
+
+            <span className="relative group flex items-center">
+              <HelpCircle className="w-4 h-4 text-gray-400 cursor-help" aria-hidden />
+              <span className="sr-only">What this check does</span>
+              <span
+                role="tooltip"
+                className="pointer-events-none absolute left-6 top-0 z-20 hidden group-hover:block w-80 rounded-lg border border-gray-200 bg-white p-3 text-xs font-normal leading-relaxed text-gray-900 shadow-lg"
+              >
+                Checks each transformed FHIR resource against its US Core {US_CORE_VERSION}{' '}
+                StructureDefinition — required elements, cardinality, value-set bindings and
+                invariants. Resource types US Core does not profile (such as ExplanationOfBenefit
+                or HealthcareService) are checked against base FHIR R4 instead. Validation runs on
+                HL7&apos;s public validator at validator.fhir.org; only synthetic data is sent.
+              </span>
+            </span>
+          </div>
+
+          {plannedProfiles.length > 0 && (
+            <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <div className="text-xs font-semibold text-gray-900 mb-2">
+                {displayName}: profiles used
+              </div>
+              <ul className="space-y-1">
+                {plannedProfiles.map((p, i) => (
+                  <li key={`${p.resourceType}-${i}`} className="flex items-center gap-2 text-xs">
+                    <span className="badge-fhir">{p.resourceType ?? 'FHIR'}</span>
+                    <span className="text-gray-900">
+                      {p.profile ? (
+                        <>
+                          US Core {US_CORE_VERSION}{' '}
+                          <span className="font-mono">({profileLabel(p.profile).split('|')[0]})</span>
+                        </>
+                      ) : (
+                        <span className="text-gray-500">
+                          Base FHIR R4 — US Core defines no profile for this type
+                        </span>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-3">
+            {fhirFromCustomXslt ? (
+              <select
+                value={
+                  (fhirProfileChoice === undefined
+                    ? FHIR_PROFILE_OPTIONS[0].value
+                    : fhirProfileChoice) ?? ''
+                }
+                onChange={(e) => setFhirProfileChoice(e.target.value === '' ? null : e.target.value)}
+                disabled={fhirValidating}
+                className="text-xs border border-gray-300 rounded-lg px-2.5 py-2 bg-white disabled:opacity-40"
+              >
+                {FHIR_PROFILE_OPTIONS.map((opt) => (
+                  <option key={opt.label} value={opt.value ?? ''}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="text-xs text-gray-900">
+                Each resource is validated against its US Core {US_CORE_VERSION} profile.
+              </span>
+            )}
+
+            <button
+              onClick={handleValidateFhir}
+              disabled={fhirValidating}
+              className="btn-secondary disabled:opacity-40"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              {fhirValidating ? 'Validating…' : 'Validate FHIR'}
+            </button>
+          </div>
+
+          {fhirValidateError && (
+            <div className="mt-3 flex items-start gap-2 text-xs text-red-800 bg-red-50 border border-red-200 rounded-lg p-3">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-red-600" />
+              {fhirValidateError}
+            </div>
+          )}
+
+          {fhirValidationResult && (
+            <div className="mt-4 space-y-4">
+              {fhirValidationResult.files.length > 1 && (
+                <div className="text-xs text-gray-900">
+                  <span className="font-semibold">
+                    {fhirValidationResult.files.filter((f) => f.valid).length}
+                  </span>{' '}
+                  of {fhirValidationResult.files.length} resources valid ·{' '}
+                  {fhirValidationResult.error_count} total issue
+                  {fhirValidationResult.error_count === 1 ? '' : 's'}
+                </div>
+              )}
+
+              {fhirValidationResult.files.map((file) => (
+                <div key={file.fileName}>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="badge-fhir">{resourceTypeFor(file.fileName) ?? 'FHIR'}</span>
+                    <span className="text-xs font-mono text-gray-900">{file.fileName}</span>
+                  </div>
+                  <ValidationResult
+                    result={{
+                      valid: file.valid,
+                      schema: profileLabel(file.schema),
+                      error_count: file.error_count,
+                      errors: file.errors,
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Step 6: Export ── */}
+      {(hasGenerated || hasFhirOutput) && (
+        <div className="card p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-coco-red text-white text-xs font-bold flex-shrink-0">
+              6
             </div>
             <h2 className="text-sm font-semibold text-gray-900">Export</h2>
           </div>

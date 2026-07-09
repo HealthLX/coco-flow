@@ -520,6 +520,120 @@ export async function validateCustomXml(
   return res.json() as Promise<ValidationResult>
 }
 
+// ── Validation (FHIR profile) ────────────────────────────────────────────────
+
+export const US_CORE_VERSION = '6.1.0'
+const US_CORE_SD = 'http://hl7.org/fhir/us/core/StructureDefinition'
+
+/**
+ * US Core 6.1.0 profile per resource type, for the types where US Core defines exactly one.
+ *
+ * Deliberately omitted:
+ *  - Observation (22 profiles), Condition (2), DiagnosticReport (2) — ambiguous; the right
+ *    profile depends on the clinical item, which a resource type alone can't tell us.
+ *  - ExplanationOfBenefit, Claim, Coverage's InsurancePlan, MedicationKnowledge, List,
+ *    HealthcareService, OrganizationAffiliation — US Core 6.1.0 defines no profile for them.
+ *
+ * Anything not listed here validates against base FHIR R4.
+ * The `|6.1.0` suffix pins the version: the validator resolves it and rejects an unknown
+ * version rather than ignoring it.
+ */
+export const US_CORE_PROFILE_BY_TYPE: Record<string, string> = {
+  AllergyIntolerance: `${US_CORE_SD}/us-core-allergyintolerance|${US_CORE_VERSION}`,
+  CarePlan: `${US_CORE_SD}/us-core-careplan|${US_CORE_VERSION}`,
+  CareTeam: `${US_CORE_SD}/us-core-careteam|${US_CORE_VERSION}`,
+  Coverage: `${US_CORE_SD}/us-core-coverage|${US_CORE_VERSION}`,
+  DocumentReference: `${US_CORE_SD}/us-core-documentreference|${US_CORE_VERSION}`,
+  Encounter: `${US_CORE_SD}/us-core-encounter|${US_CORE_VERSION}`,
+  Goal: `${US_CORE_SD}/us-core-goal|${US_CORE_VERSION}`,
+  Immunization: `${US_CORE_SD}/us-core-immunization|${US_CORE_VERSION}`,
+  Location: `${US_CORE_SD}/us-core-location|${US_CORE_VERSION}`,
+  Medication: `${US_CORE_SD}/us-core-medication|${US_CORE_VERSION}`,
+  MedicationDispense: `${US_CORE_SD}/us-core-medicationdispense|${US_CORE_VERSION}`,
+  MedicationRequest: `${US_CORE_SD}/us-core-medicationrequest|${US_CORE_VERSION}`,
+  Organization: `${US_CORE_SD}/us-core-organization|${US_CORE_VERSION}`,
+  Patient: `${US_CORE_SD}/us-core-patient|${US_CORE_VERSION}`,
+  Practitioner: `${US_CORE_SD}/us-core-practitioner|${US_CORE_VERSION}`,
+  PractitionerRole: `${US_CORE_SD}/us-core-practitionerrole|${US_CORE_VERSION}`,
+  Procedure: `${US_CORE_SD}/us-core-procedure|${US_CORE_VERSION}`,
+  Provenance: `${US_CORE_SD}/us-core-provenance|${US_CORE_VERSION}`,
+  QuestionnaireResponse: `${US_CORE_SD}/us-core-questionnaireresponse|${US_CORE_VERSION}`,
+  RelatedPerson: `${US_CORE_SD}/us-core-relatedperson|${US_CORE_VERSION}`,
+  ServiceRequest: `${US_CORE_SD}/us-core-servicerequest|${US_CORE_VERSION}`,
+  Specimen: `${US_CORE_SD}/us-core-specimen|${US_CORE_VERSION}`,
+}
+
+/** US Core 6.1.0 profile for a resource type, or null when US Core doesn't define one. */
+export function usCoreProfileFor(resourceType: string | null | undefined): string | null {
+  return resourceType ? (US_CORE_PROFILE_BY_TYPE[resourceType] ?? null) : null
+}
+
+/** Ensure a profile canonical carries an explicit version. */
+export function pinUsCoreVersion(profile: string): string {
+  return profile.includes('|') ? profile : `${profile}|${US_CORE_VERSION}`
+}
+
+/**
+ * Offered only for custom XSLT output, where no resource type mapping is assumed.
+ * Built-in transforms pick a profile per resource automatically.
+ */
+export const FHIR_PROFILE_OPTIONS: { label: string; value: string | null }[] = [
+  {
+    label: `US Core ${US_CORE_VERSION} Patient (USCDI v3)`,
+    value: `${US_CORE_SD}/us-core-patient|${US_CORE_VERSION}`,
+  },
+  { label: 'Base FHIR R4 (No Profile)', value: null },
+]
+
+export interface FhirFileToValidate {
+  fileName: string
+  xml: string
+  /** Profile canonical for this resource; null validates against base FHIR R4. */
+  profile: string | null
+}
+
+/** Validation outcome for a single FHIR resource. */
+export interface FhirFileValidation {
+  fileName: string
+  /** Profile URL used, or a label when validated against base FHIR R4. */
+  schema: string
+  valid: boolean
+  error_count: number
+  errors: ValidationIssue[]
+}
+
+export interface FhirValidationResponse {
+  /** True only when every resource is valid. */
+  valid: boolean
+  error_count: number
+  files: FhirFileValidation[]
+}
+
+/**
+ * POST /fhir-validate — validate FHIR XML, each resource against its own profile.
+ * Handled by the Express server, which forwards to HL7's public validator.
+ */
+export async function validateFhirXml(
+  files: FhirFileToValidate[],
+): Promise<FhirValidationResponse> {
+  const res = await fetch(`${BASE}/fhir-validate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ files }),
+  })
+  if (!res.ok) {
+    let detail = res.statusText
+    try {
+      const body = (await res.json()) as { error?: string; detail?: string }
+      detail = body.error ?? detail
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new Error(detail)
+  }
+  return res.json() as Promise<FhirValidationResponse>
+}
+
 // ── Artifacts (Schemas & Transforms) ─────────────────────────────────────────
 
 /** GET /schemas — list all XSD schema filenames */

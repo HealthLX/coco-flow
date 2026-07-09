@@ -1,0 +1,23 @@
+name: Deploy to Render
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+
+    steps:
+      # Render builds the image from this repo itself, so nothing is built here.
+      # If auto-deploy-on-push is enabled in the Render dashboard, this hook is
+      # redundant and the whole workflow can be deleted.
+      - name: Trigger Render Deploy
+        if: ${{ env.RENDER_DEPLOY_HOOK != '' }}
+        run: curl -f -X POST "$RENDER_DEPLOY_HOOK"
