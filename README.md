@@ -1,4 +1,4 @@
-https://[coco-flow.onrender.com](https://flow.cocodata.org/)/
+https://flow.cocodata.org/
 
 # coco-flow
 
