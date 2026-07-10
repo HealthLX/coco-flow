@@ -156,19 +156,24 @@ async function runPool<T>(
   await Promise.all(runners)
 }
 
-/** The upstream request this row is waiting on — shown live, while it is in flight. */
-function InFlightCallMetadata({
+/**
+ * The upstream request behind this row. Stays visible after the call settles, so a passing
+ * result still shows what it was actually checked against.
+ */
+function ValidatorCallMetadata({
   doc,
   config,
-  elapsedSeconds,
+  state,
+  liveSeconds,
 }: {
   doc: FhirDoc
   config: FhirValidatorConfig | undefined
-  elapsedSeconds: number | null
+  state: FhirRowState
+  liveSeconds: number | null
 }) {
-  if (!config) return null
+  if (!config || state.status === 'queued') return null
   // A cold engine loads the IG before it can validate anything, which dominates the wait.
-  const coldStart = !config.sessionActive && (elapsedSeconds ?? 0) > 3
+  const coldStart = state.status === 'running' && !config.sessionActive && (liveSeconds ?? 0) > 3
 
   return (
     <div className="mb-2 rounded-lg border border-gray-200 bg-gray-50 p-2.5 font-mono text-[11px] leading-relaxed text-gray-600">
@@ -183,9 +188,22 @@ function InFlightCallMetadata({
         filesToValidate=[{doc.fileName}] · timeout={config.timeoutMs / 1000}s · attempts&le;
         {config.maxAttempts}
       </div>
+
       {coldStart && (
         <div className="mt-1 text-amber-700">
           cold engine — loading {config.igs[0]} definitions, this first call can take ~50s
+        </div>
+      )}
+
+      {state.status === 'done' && (
+        <div className="mt-1 text-gray-500">
+          → {state.result.error_count} issue{state.result.error_count === 1 ? '' : 's'} in{' '}
+          {formatSeconds(state.elapsedMs / 1000)}
+        </div>
+      )}
+      {state.status === 'error' && (
+        <div className="mt-1 text-red-700">
+          → request failed after {formatSeconds(state.elapsedMs / 1000)}
         </div>
       )}
     </div>
@@ -227,9 +245,7 @@ function FhirValidationRow({
         </span>
       </div>
 
-      {state.status === 'running' && (
-        <InFlightCallMetadata doc={doc} config={config} elapsedSeconds={liveSeconds} />
-      )}
+      <ValidatorCallMetadata doc={doc} config={config} state={state} liveSeconds={liveSeconds} />
 
       {state.status === 'done' && (
         <ValidationResult
@@ -375,11 +391,7 @@ export default function WorkspacePage() {
     (r) => r.status === 'queued' || r.status === 'running',
   )
 
-  /**
-   * Only Roster's transform currently produces output clean enough to validate meaningfully.
-   * The other canonicals still have open mapping issues, so the check is hidden for them
-   * rather than reporting failures the user cannot act on yet.
-   */
+  /** FHIR validation is enabled for Roster only; the step is hidden for every other canonical. */
   const fhirValidationSupported = isPredefined && normCanonicalId(selectedCanonical) === 'roster'
 
   // Refetched while a run is in flight so `sessionActive` flips once the engine is warm.
@@ -1070,7 +1082,7 @@ export default function WorkspacePage() {
         ))}
 
       {/* ── Step 5: Validate FHIR ── */}
-      {hasFhirOutput && (
+      {hasFhirOutput && fhirValidationSupported && (
         <div className="card p-5">
           <div className="flex items-center gap-2 mb-4">
             <div className="flex h-6 w-6 items-center justify-center rounded-full bg-coco-red text-white text-xs font-bold flex-shrink-0">
@@ -1128,18 +1140,7 @@ export default function WorkspacePage() {
             </span>
           </div>
 
-          {!fhirValidationSupported && (
-            <div className="flex items-start gap-2 text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-lg p-3">
-              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-gray-400" />
-              <span>
-                FHIR validation is enabled for the <span className="font-semibold">Roster</span>{' '}
-                canonical for now. The other transforms still have open mapping issues, so
-                validating them would report failures you cannot act on yet.
-              </span>
-            </div>
-          )}
-
-          {fhirValidationSupported && fhirDocs.length > 0 && (
+          {fhirDocs.length > 0 && (
             <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
               <div className="text-xs font-semibold text-gray-900 mb-2">
                 {displayName}: profiles used
@@ -1166,52 +1167,48 @@ export default function WorkspacePage() {
             </div>
           )}
 
-          {fhirValidationSupported && (
-            <div className="flex flex-wrap items-center gap-3">
-              {fhirFromCustomXslt ? (
-                <select
-                  value={
-                    (fhirProfileChoice === undefined
-                      ? FHIR_PROFILE_OPTIONS[0].value
-                      : fhirProfileChoice) ?? ''
-                  }
-                  onChange={(e) =>
-                    setFhirProfileChoice(e.target.value === '' ? null : e.target.value)
-                  }
-                  disabled={fhirValidating}
-                  className="text-xs border border-gray-300 rounded-lg px-2.5 py-2 bg-white disabled:opacity-40"
-                >
-                  {FHIR_PROFILE_OPTIONS.map((opt) => (
-                    <option key={opt.label} value={opt.value ?? ''}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <span className="text-xs text-gray-900">
-                  Each resource is validated against its US Core {US_CORE_VERSION} profile.
-                </span>
-              )}
-
-              <button
-                onClick={handleValidateFhir}
+          <div className="flex flex-wrap items-center gap-3">
+            {fhirFromCustomXslt ? (
+              <select
+                value={
+                  (fhirProfileChoice === undefined
+                    ? FHIR_PROFILE_OPTIONS[0].value
+                    : fhirProfileChoice) ?? ''
+                }
+                onChange={(e) => setFhirProfileChoice(e.target.value === '' ? null : e.target.value)}
                 disabled={fhirValidating}
-                className="btn-secondary disabled:opacity-40"
+                className="text-xs border border-gray-300 rounded-lg px-2.5 py-2 bg-white disabled:opacity-40"
               >
-                {fhirValidating ? (
-                  <>
-                    <Spinner tone="red" />
-                    Validating…
-                  </>
-                ) : (
-                  <>
-                    <ShieldCheck className="w-4 h-4" />
-                    Validate FHIR
-                  </>
-                )}
-              </button>
-            </div>
-          )}
+                {FHIR_PROFILE_OPTIONS.map((opt) => (
+                  <option key={opt.label} value={opt.value ?? ''}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="text-xs text-gray-900">
+                Each resource is validated against its US Core {US_CORE_VERSION} profile.
+              </span>
+            )}
+
+            <button
+              onClick={handleValidateFhir}
+              disabled={fhirValidating}
+              className="btn-secondary disabled:opacity-40"
+            >
+              {fhirValidating ? (
+                <>
+                  <Spinner tone="red" />
+                  Validating…
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="w-4 h-4" />
+                  Validate FHIR
+                </>
+              )}
+            </button>
+          </div>
 
           {fhirValidateError && (
             <div className="mt-3 flex items-start gap-2 text-xs text-red-800 bg-red-50 border border-red-200 rounded-lg p-3">
@@ -1220,7 +1217,7 @@ export default function WorkspacePage() {
             </div>
           )}
 
-          {fhirValidationSupported && Object.keys(fhirRows).length > 0 && (
+          {Object.keys(fhirRows).length > 0 && (
             <div className="mt-4 space-y-4">
               {fhirDocs.length > 1 && (
                 <div className="text-xs text-gray-900">
