@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   FileText,
@@ -22,6 +22,8 @@ import {
   validateCanonicalXml,
   validateCustomXml,
   validateFhirXml,
+  explodeFhirXml,
+  getFhirValidatorConfig,
   FHIR_PROFILE_OPTIONS,
   usCoreProfileFor,
   pinUsCoreVersion,
@@ -34,10 +36,13 @@ import {
 import type {
   Build,
   FhirTransformResult,
-  FhirValidationResponse,
+  FhirFileValidation,
+  FhirValidatorConfig,
   ValidationResult as ValidationResultData,
 } from '../services/api'
 import { addToHistory } from '../lib/history'
+import Spinner from '../components/Spinner'
+import { useElapsedSeconds, formatSeconds } from '../hooks/useElapsedSeconds'
 import XmlPreview from '../components/XmlPreview'
 import ValidationResult from '../components/ValidationResult'
 import { storeFileTemp, retrieveTempFile } from './HomePage'
@@ -114,14 +119,137 @@ function fhirExportBasename(canonicalName: string): string {
   return canonicalName
 }
 
-/** Root element of a FHIR XML document, e.g. "Patient". Skips the XML declaration. */
-function rootResourceType(xml: string): string | null {
-  return xml.match(/<([A-Za-z][A-Za-z0-9]*)[\s>]/)?.[1] ?? null
-}
-
 /** "…/us-core-patient|6.1.0" → "us-core-patient|6.1.0"; base-R4 label passes through. */
 function profileLabel(schema: string): string {
   return schema.includes('/') ? (schema.split('/').pop() ?? schema) : schema
+}
+
+/** One resource queued for validation, with the profile it will be checked against. */
+interface FhirDoc {
+  fileName: string
+  xml: string
+  resourceType: string | null
+  profile: string | null
+}
+
+/** Each resource validates on its own, so each carries its own status and timing. */
+type FhirRowState =
+  | { status: 'queued' }
+  | { status: 'running'; startedAt: number }
+  | { status: 'done'; elapsedMs: number; result: FhirFileValidation }
+  | { status: 'error'; elapsedMs: number; message: string }
+
+/** Upstream is a shared public validator, so keep only a few resources in flight at once. */
+const FHIR_VALIDATE_CONCURRENCY = 4
+
+async function runPool<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<void>,
+): Promise<void> {
+  let next = 0
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      await worker(items[next++])
+    }
+  })
+  await Promise.all(runners)
+}
+
+/** The upstream request this row is waiting on — shown live, while it is in flight. */
+function InFlightCallMetadata({
+  doc,
+  config,
+  elapsedSeconds,
+}: {
+  doc: FhirDoc
+  config: FhirValidatorConfig | undefined
+  elapsedSeconds: number | null
+}) {
+  if (!config) return null
+  // A cold engine loads the IG before it can validate anything, which dominates the wait.
+  const coldStart = !config.sessionActive && (elapsedSeconds ?? 0) > 3
+
+  return (
+    <div className="mb-2 rounded-lg border border-gray-200 bg-gray-50 p-2.5 font-mono text-[11px] leading-relaxed text-gray-600">
+      <div className="text-gray-900">
+        {config.method} {config.endpoint}
+      </div>
+      <div>
+        sv={config.fhirVersion} · igs={config.igs.join(', ')} · txServer={config.txServer}
+      </div>
+      <div>profiles={doc.profile ? profileLabel(doc.profile) : '[] (base FHIR R4)'}</div>
+      <div>
+        filesToValidate=[{doc.fileName}] · timeout={config.timeoutMs / 1000}s · attempts&le;
+        {config.maxAttempts}
+      </div>
+      {coldStart && (
+        <div className="mt-1 text-amber-700">
+          cold engine — loading {config.igs[0]} definitions, this first call can take ~50s
+        </div>
+      )}
+    </div>
+  )
+}
+
+function FhirValidationRow({
+  doc,
+  state,
+  config,
+}: {
+  doc: FhirDoc
+  state: FhirRowState
+  config: FhirValidatorConfig | undefined
+}) {
+  const liveSeconds = useElapsedSeconds(state.status === 'running' ? state.startedAt : null)
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className="badge-fhir">{doc.resourceType ?? 'FHIR'}</span>
+        <span className="text-xs font-mono text-gray-900">{doc.fileName}</span>
+
+        <span className="ml-auto flex items-center gap-1.5 text-xs">
+          {state.status === 'queued' && <span className="text-gray-400">Queued</span>}
+          {state.status === 'running' && (
+            <>
+              <Spinner size="sm" tone="green" />
+              <span className="text-gray-600 tabular-nums">
+                {liveSeconds === null ? '' : formatSeconds(liveSeconds)}
+              </span>
+            </>
+          )}
+          {state.status !== 'queued' && state.status !== 'running' && (
+            <span className="text-gray-500 tabular-nums">
+              {formatSeconds(state.elapsedMs / 1000)}
+            </span>
+          )}
+        </span>
+      </div>
+
+      {state.status === 'running' && (
+        <InFlightCallMetadata doc={doc} config={config} elapsedSeconds={liveSeconds} />
+      )}
+
+      {state.status === 'done' && (
+        <ValidationResult
+          result={{
+            valid: state.result.valid,
+            schema: profileLabel(state.result.schema),
+            error_count: state.result.error_count,
+            errors: state.result.errors,
+          }}
+        />
+      )}
+
+      {state.status === 'error' && (
+        <div className="flex items-start gap-2 text-xs text-red-800 bg-red-50 border border-red-200 rounded-lg p-3">
+          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-red-600" />
+          {state.message}
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ── Component ─────────────────────────────────────────────────────────────
@@ -170,9 +298,9 @@ export default function WorkspacePage() {
   // build's configured fhir_profile. `undefined` means "no explicit pick yet".
   const [fhirFromCustomXslt, setFhirFromCustomXslt] = useState(false)
   const [fhirProfileChoice, setFhirProfileChoice] = useState<string | null | undefined>(undefined)
-  const [fhirValidating, setFhirValidating] = useState(false)
   const [fhirValidateError, setFhirValidateError] = useState<string | null>(null)
-  const [fhirValidationResult, setFhirValidationResult] = useState<FhirValidationResponse | null>(null)
+  /** Keyed by fileName so each resource's spinner, timing and result update independently. */
+  const [fhirRows, setFhirRows] = useState<Record<string, FhirRowState>>({})
 
   // ── Derived values ────────────────────────────────────────────────────────
   const isPredefined = selectorTab === 'predefined'
@@ -225,36 +353,54 @@ export default function WorkspacePage() {
     return usCoreProfileFor(resourceType)
   }
 
-  /** What each transformed resource will be validated against, shown before you click. */
-  const plannedProfiles: { resourceType: string | null; profile: string | null }[] = !fhirResult
-    ? []
-    : fhirResult.kind === 'single'
-      ? [
-          {
-            resourceType: rootResourceType(fhirResult.xml),
-            profile: profileForResource(rootResourceType(fhirResult.xml)),
-          },
-        ]
-      : fhirResult.parts.map((p) => ({
-          resourceType: p.resourceType,
-          profile: profileForResource(p.resourceType),
-        }))
+  /**
+   * The resources that will be validated, one row each. Drives both the pre-click profile
+   * preview and the post-click rows, so the two cannot drift. Transforms that wrap their
+   * output in a collection element are split here into one resource per child.
+   */
+  const fhirDocs: FhirDoc[] = useMemo(() => {
+    if (!fhirResult) return []
+    const base = selectedCanonical ? fhirExportBasename(selectedCanonical) : 'fhir-output'
+    const documents =
+      fhirResult.kind === 'single'
+        ? [{ fileName: `${base}-fhir.xml`, xml: fhirResult.xml }]
+        : fhirResult.parts.map((p) => ({ fileName: p.filename, xml: p.xml }))
 
-  /** Resource type badge for a validated file — from the transform parts, or the XML root. */
-  const resourceTypeFor = (fileName: string): string | null => {
-    if (!fhirResult) return null
-    if (fhirResult.kind === 'multipart') {
-      return fhirResult.parts.find((p) => p.filename === fileName)?.resourceType ?? null
-    }
-    return rootResourceType(fhirResult.xml)
-  }
+    return documents
+      .flatMap((d) => explodeFhirXml(d.fileName, d.xml))
+      .map((d) => ({ ...d, profile: profileForResource(d.resourceType) }))
+  }, [fhirResult, selectedCanonical, fhirFromCustomXslt, fhirProfileChoice, configuredFhirProfile])
+
+  const fhirValidating = Object.values(fhirRows).some(
+    (r) => r.status === 'queued' || r.status === 'running',
+  )
+
+  /**
+   * Only Roster's transform currently produces output clean enough to validate meaningfully.
+   * The other canonicals still have open mapping issues, so the check is hidden for them
+   * rather than reporting failures the user cannot act on yet.
+   */
+  const fhirValidationSupported = isPredefined && normCanonicalId(selectedCanonical) === 'roster'
+
+  // Refetched while a run is in flight so `sessionActive` flips once the engine is warm.
+  const { data: fhirValidatorConfig } = useQuery({
+    queryKey: ['fhir-validator-config'],
+    queryFn: getFhirValidatorConfig,
+    enabled: fhirValidationSupported && !!fhirResult,
+    refetchInterval: fhirValidating ? 5_000 : false,
+    staleTime: 5_000,
+  })
+
+  const settledRows = fhirDocs
+    .map((d) => fhirRows[d.fileName])
+    .filter((r): r is Extract<FhirRowState, { status: 'done' }> => r?.status === 'done')
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   const resetFhirValidation = () => {
     setFhirProfileChoice(undefined)
     setFhirFromCustomXslt(false)
-    setFhirValidationResult(null)
+    setFhirRows({})
     setFhirValidateError(null)
   }
 
@@ -368,40 +514,39 @@ export default function WorkspacePage() {
   }
 
   const handleValidateFhir = async () => {
-    if (!fhirResult) return
-    setFhirValidating(true)
+    if (fhirDocs.length === 0) return
     setFhirValidateError(null)
-    setFhirValidationResult(null)
+    // Seed every row before the first request so the whole list renders immediately.
+    setFhirRows(Object.fromEntries(fhirDocs.map((d) => [d.fileName, { status: 'queued' }])))
 
-    try {
-      const base = selectedCanonical ? fhirExportBasename(selectedCanonical) : 'fhir-output'
-      const files =
-        fhirResult.kind === 'single'
-          ? [
-              {
-                fileName: `${base}-fhir.xml`,
-                xml: fhirResult.xml,
-                profile: profileForResource(rootResourceType(fhirResult.xml)),
-              },
-            ]
-          : fhirResult.parts.map((p) => ({
-              fileName: p.filename,
-              xml: p.xml,
-              profile: profileForResource(p.resourceType),
-            }))
+    const setRow = (fileName: string, state: FhirRowState) =>
+      setFhirRows((prev) => ({ ...prev, [fileName]: state }))
 
-      setFhirValidationResult(await validateFhirXml(files))
-      addToHistory({
-        label: `${displayName} FHIR validated`,
-        actionType: 'fhir-validated',
-        fileType: 'fhir',
-        serverFilename: null,
-      })
-    } catch (e) {
-      setFhirValidateError((e as Error).message)
-    } finally {
-      setFhirValidating(false)
-    }
+    await runPool(fhirDocs, FHIR_VALIDATE_CONCURRENCY, async (doc) => {
+      const startedAt = Date.now()
+      setRow(doc.fileName, { status: 'running', startedAt })
+      try {
+        const res = await validateFhirXml([
+          { fileName: doc.fileName, xml: doc.xml, profile: doc.profile },
+        ])
+        const result = res.files[0]
+        if (!result) throw new Error('Validator returned no result for this resource')
+        setRow(doc.fileName, { status: 'done', elapsedMs: Date.now() - startedAt, result })
+      } catch (e) {
+        setRow(doc.fileName, {
+          status: 'error',
+          elapsedMs: Date.now() - startedAt,
+          message: (e as Error).message,
+        })
+      }
+    })
+
+    addToHistory({
+      label: `${displayName} FHIR validated`,
+      actionType: 'fhir-validated',
+      fileType: 'fhir',
+      serverFilename: null,
+    })
   }
 
   const handleTransform = async (useCustomXslt: boolean) => {
@@ -409,7 +554,7 @@ export default function WorkspacePage() {
     setTransforming(true)
     setTransformError(null)
     setFhirResult(null)
-    setFhirValidationResult(null)
+    setFhirRows({})
     setFhirValidateError(null)
 
     try {
@@ -938,25 +1083,70 @@ export default function WorkspacePage() {
               <span className="sr-only">What this check does</span>
               <span
                 role="tooltip"
-                className="pointer-events-none absolute left-6 top-0 z-20 hidden group-hover:block w-80 rounded-lg border border-gray-200 bg-white p-3 text-xs font-normal leading-relaxed text-gray-900 shadow-lg"
+                className="pointer-events-none absolute left-6 top-0 z-20 hidden group-hover:block w-[26rem] rounded-lg border border-gray-200 bg-white p-3 text-xs font-normal leading-relaxed text-gray-900 shadow-lg"
               >
-                Checks each transformed FHIR resource against its US Core {US_CORE_VERSION}{' '}
-                StructureDefinition — required elements, cardinality, value-set bindings and
-                invariants. Resource types US Core does not profile (such as ExplanationOfBenefit
-                or HealthcareService) are checked against base FHIR R4 instead. Validation runs on
-                HL7&apos;s public validator at validator.fhir.org; only synthetic data is sent.
+                CoCo Flow does not validate FHIR itself. It POSTs each transformed resource to
+                HL7&apos;s FHIR validator API — one HTTP request per resource — and reports the
+                issues that come back. Only synthetic data is sent.
+                <span className="mt-2 block rounded-md bg-gray-50 p-2 font-mono text-[11px] leading-snug text-gray-700">
+                  POST {fhirValidatorConfig?.endpoint ?? 'https://validator.fhir.org/validate'}
+                  <br />
+                  {'{'}
+                  <br />
+                  &nbsp;&nbsp;&quot;sessionId&quot;: &quot;…&quot;,
+                  <br />
+                  &nbsp;&nbsp;&quot;validationContext&quot;: {'{'}
+                  <br />
+                  &nbsp;&nbsp;&nbsp;&nbsp;&quot;sv&quot;: &quot;
+                  {fhirValidatorConfig?.fhirVersion ?? '4.0.1'}&quot;,
+                  <br />
+                  &nbsp;&nbsp;&nbsp;&nbsp;&quot;igs&quot;: [&quot;
+                  {fhirValidatorConfig?.igs[0] ?? 'hl7.fhir.us.core#6.1.0'}&quot;],
+                  <br />
+                  &nbsp;&nbsp;&nbsp;&nbsp;&quot;profiles&quot;: [&quot;…/us-core-patient|
+                  {US_CORE_VERSION}&quot;],
+                  <br />
+                  &nbsp;&nbsp;&nbsp;&nbsp;&quot;txServer&quot;: &quot;
+                  {fhirValidatorConfig?.txServer ?? 'http://tx.fhir.org'}&quot;
+                  <br />
+                  &nbsp;&nbsp;{'}'},
+                  <br />
+                  &nbsp;&nbsp;&quot;filesToValidate&quot;: [{'{'} &quot;fileName&quot;, &quot;
+                  fileContent&quot;, &quot;fileType&quot; {'}'}]
+                  <br />
+                  {'}'}
+                </span>
+                <span className="mt-2 block">
+                  The <span className="font-mono">profiles</span> field decides how strict the
+                  check is: each resource is sent with its US Core {US_CORE_VERSION}{' '}
+                  StructureDefinition, so required elements, cardinality, value-set bindings and
+                  invariants are all enforced. Types US Core does not profile fall back to base
+                  FHIR R4. The <span className="font-mono">sessionId</span> keeps the upstream
+                  engine warm — the first call loads the IG and takes ~50s, later ones ~0.5s.
+                </span>
               </span>
             </span>
           </div>
 
-          {plannedProfiles.length > 0 && (
+          {!fhirValidationSupported && (
+            <div className="flex items-start gap-2 text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-lg p-3">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-gray-400" />
+              <span>
+                FHIR validation is enabled for the <span className="font-semibold">Roster</span>{' '}
+                canonical for now. The other transforms still have open mapping issues, so
+                validating them would report failures you cannot act on yet.
+              </span>
+            </div>
+          )}
+
+          {fhirValidationSupported && fhirDocs.length > 0 && (
             <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
               <div className="text-xs font-semibold text-gray-900 mb-2">
                 {displayName}: profiles used
               </div>
               <ul className="space-y-1">
-                {plannedProfiles.map((p, i) => (
-                  <li key={`${p.resourceType}-${i}`} className="flex items-center gap-2 text-xs">
+                {fhirDocs.map((p) => (
+                  <li key={p.fileName} className="flex items-center gap-2 text-xs">
                     <span className="badge-fhir">{p.resourceType ?? 'FHIR'}</span>
                     <span className="text-gray-900">
                       {p.profile ? (
@@ -976,39 +1166,52 @@ export default function WorkspacePage() {
             </div>
           )}
 
-          <div className="flex flex-wrap items-center gap-3">
-            {fhirFromCustomXslt ? (
-              <select
-                value={
-                  (fhirProfileChoice === undefined
-                    ? FHIR_PROFILE_OPTIONS[0].value
-                    : fhirProfileChoice) ?? ''
-                }
-                onChange={(e) => setFhirProfileChoice(e.target.value === '' ? null : e.target.value)}
-                disabled={fhirValidating}
-                className="text-xs border border-gray-300 rounded-lg px-2.5 py-2 bg-white disabled:opacity-40"
-              >
-                {FHIR_PROFILE_OPTIONS.map((opt) => (
-                  <option key={opt.label} value={opt.value ?? ''}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <span className="text-xs text-gray-900">
-                Each resource is validated against its US Core {US_CORE_VERSION} profile.
-              </span>
-            )}
+          {fhirValidationSupported && (
+            <div className="flex flex-wrap items-center gap-3">
+              {fhirFromCustomXslt ? (
+                <select
+                  value={
+                    (fhirProfileChoice === undefined
+                      ? FHIR_PROFILE_OPTIONS[0].value
+                      : fhirProfileChoice) ?? ''
+                  }
+                  onChange={(e) =>
+                    setFhirProfileChoice(e.target.value === '' ? null : e.target.value)
+                  }
+                  disabled={fhirValidating}
+                  className="text-xs border border-gray-300 rounded-lg px-2.5 py-2 bg-white disabled:opacity-40"
+                >
+                  {FHIR_PROFILE_OPTIONS.map((opt) => (
+                    <option key={opt.label} value={opt.value ?? ''}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="text-xs text-gray-900">
+                  Each resource is validated against its US Core {US_CORE_VERSION} profile.
+                </span>
+              )}
 
-            <button
-              onClick={handleValidateFhir}
-              disabled={fhirValidating}
-              className="btn-secondary disabled:opacity-40"
-            >
-              <ShieldCheck className="w-4 h-4" />
-              {fhirValidating ? 'Validating…' : 'Validate FHIR'}
-            </button>
-          </div>
+              <button
+                onClick={handleValidateFhir}
+                disabled={fhirValidating}
+                className="btn-secondary disabled:opacity-40"
+              >
+                {fhirValidating ? (
+                  <>
+                    <Spinner tone="red" />
+                    Validating…
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-4 h-4" />
+                    Validate FHIR
+                  </>
+                )}
+              </button>
+            </div>
+          )}
 
           {fhirValidateError && (
             <div className="mt-3 flex items-start gap-2 text-xs text-red-800 bg-red-50 border border-red-200 rounded-lg p-3">
@@ -1017,35 +1220,32 @@ export default function WorkspacePage() {
             </div>
           )}
 
-          {fhirValidationResult && (
+          {fhirValidationSupported && Object.keys(fhirRows).length > 0 && (
             <div className="mt-4 space-y-4">
-              {fhirValidationResult.files.length > 1 && (
+              {fhirDocs.length > 1 && (
                 <div className="text-xs text-gray-900">
                   <span className="font-semibold">
-                    {fhirValidationResult.files.filter((f) => f.valid).length}
+                    {settledRows.filter((r) => r.result.valid).length}
                   </span>{' '}
-                  of {fhirValidationResult.files.length} resources valid ·{' '}
-                  {fhirValidationResult.error_count} total issue
-                  {fhirValidationResult.error_count === 1 ? '' : 's'}
+                  of {fhirDocs.length} resources valid ·{' '}
+                  {settledRows.reduce((n, r) => n + r.result.error_count, 0)} total issue
+                  {settledRows.reduce((n, r) => n + r.result.error_count, 0) === 1 ? '' : 's'}
+                  {fhirValidating && <span className="text-gray-500"> · validating…</span>}
                 </div>
               )}
 
-              {fhirValidationResult.files.map((file) => (
-                <div key={file.fileName}>
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <span className="badge-fhir">{resourceTypeFor(file.fileName) ?? 'FHIR'}</span>
-                    <span className="text-xs font-mono text-gray-900">{file.fileName}</span>
-                  </div>
-                  <ValidationResult
-                    result={{
-                      valid: file.valid,
-                      schema: profileLabel(file.schema),
-                      error_count: file.error_count,
-                      errors: file.errors,
-                    }}
+              {fhirDocs.map((doc) => {
+                const state = fhirRows[doc.fileName]
+                if (!state) return null
+                return (
+                  <FhirValidationRow
+                    key={doc.fileName}
+                    doc={doc}
+                    state={state}
+                    config={fhirValidatorConfig}
                   />
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>

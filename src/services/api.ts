@@ -585,11 +585,79 @@ export const FHIR_PROFILE_OPTIONS: { label: string; value: string | null }[] = [
   { label: 'Base FHIR R4 (No Profile)', value: null },
 ]
 
+const FHIR_NS = 'http://hl7.org/fhir'
+
+/**
+ * Resource types the validator can be handed as a document root. The US Core map covers the
+ * profiled ones; the rest appear in transform output but validate against base FHIR R4.
+ */
+export const FHIR_RESOURCE_TYPES: ReadonlySet<string> = new Set([
+  ...Object.keys(US_CORE_PROFILE_BY_TYPE),
+  'Basic',
+  'Bundle',
+  'Claim',
+  'Condition',
+  'Device',
+  'DiagnosticReport',
+  'Endpoint',
+  'ExplanationOfBenefit',
+  'HealthcareService',
+  'InsurancePlan',
+  'List',
+  'MedicationKnowledge',
+  'Observation',
+  'OrganizationAffiliation',
+])
+
+/** Root element of a FHIR XML document, e.g. "Patient". Skips the XML declaration. */
+export function rootResourceType(xml: string): string | null {
+  return xml.match(/<([A-Za-z][A-Za-z0-9]*)[\s>]/)?.[1] ?? null
+}
+
 export interface FhirFileToValidate {
   fileName: string
   xml: string
   /** Profile canonical for this resource; null validates against base FHIR R4. */
   profile: string | null
+}
+
+/** One standalone FHIR resource pulled out of a transform's output document. */
+export interface FhirResourceDoc {
+  fileName: string
+  xml: string
+  resourceType: string | null
+}
+
+/**
+ * Several Clinical transforms wrap their resources in a collection element — `<Observations>`,
+ * `<Conditions>`, and so on — which is not a FHIR resource, so the validator rejects the
+ * document outright. Each child already declares the FHIR namespace, so we hand the validator
+ * one resource per child instead. Anything we don't recognise is passed through untouched, so
+ * the validator reports the real problem rather than one we invented.
+ */
+export function explodeFhirXml(fileName: string, xml: string): FhirResourceDoc[] {
+  const whole = [{ fileName, xml, resourceType: rootResourceType(xml) }]
+
+  const doc = new DOMParser().parseFromString(xml, 'application/xml')
+  const root = doc.documentElement
+  if (!root || doc.getElementsByTagName('parsererror').length > 0) return whole
+  if (FHIR_RESOURCE_TYPES.has(root.localName)) return whole
+
+  const children = Array.from(root.children)
+  const isResource = (el: Element) =>
+    el.namespaceURI === FHIR_NS && FHIR_RESOURCE_TYPES.has(el.localName)
+  if (children.length === 0 || !children.every(isResource)) return whole
+
+  const serializer = new XMLSerializer()
+  const dot = fileName.lastIndexOf('.')
+  const base = dot > 0 ? fileName.slice(0, dot) : fileName
+  const ext = dot > 0 ? fileName.slice(dot) : ''
+
+  return children.map((child, i) => ({
+    fileName: `${base}-${child.localName}${i + 1}${ext}`,
+    xml: `<?xml version="1.0" encoding="utf-8"?>\n${serializer.serializeToString(child)}`,
+    resourceType: child.localName,
+  }))
 }
 
 /** Validation outcome for a single FHIR resource. */
@@ -607,6 +675,25 @@ export interface FhirValidationResponse {
   valid: boolean
   error_count: number
   files: FhirFileValidation[]
+}
+
+/** Describes the upstream validator call, so the UI can show what it is doing while it runs. */
+export interface FhirValidatorConfig {
+  endpoint: string
+  method: 'POST'
+  fhirVersion: string
+  igs: string[]
+  txServer: string
+  sessionActive: boolean
+  timeoutMs: number
+  maxAttempts: number
+}
+
+/** GET /fhir-validate/config — the endpoint, IG and terminology server used for each call. */
+export async function getFhirValidatorConfig(): Promise<FhirValidatorConfig> {
+  const res = await fetch(`${BASE}/fhir-validate/config`)
+  if (!res.ok) throw new Error(`Could not read validator config: ${res.statusText}`)
+  return res.json() as Promise<FhirValidatorConfig>
 }
 
 /**
