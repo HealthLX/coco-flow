@@ -86,9 +86,16 @@ docker run -d -p 3000:3000 --name coco-flow coco-flow
 
 Open **http://localhost:3000**
 
+### Render
+
+The hosted app at <https://coco-flow.onrender.com/> is a Render service that **builds this
+repository's `Dockerfile` directly** — it does not pull a prebuilt image. CI therefore builds
+nothing: `.github/workflows/deploy.yml` only POSTs Render's deploy hook. If auto-deploy-on-push
+is enabled in the Render dashboard, that workflow is redundant and can be deleted.
+
 ### Using a container registry (any Docker host)
 
-Once you have built and pushed an image (manually or via CI) to a registry such as Docker Hub or GHCR, you can run coco-flow on any Docker host:
+If you build and push an image yourself to a registry such as Docker Hub or GHCR, you can run coco-flow on any Docker host:
 
 ```bash
 docker pull your-registry/cocoflow:latest
@@ -193,6 +200,51 @@ The `providerdirectory` build entry should include a non-empty `transform_files`
 |----------|---------|-------------|
 | `PORT` | `3000` | Express server port |
 | `FASTAPI_URL` | `http://localhost:8000` | FastAPI service URL |
+| `VALIDATOR_API_URL` | `https://validator.fhir.org` | FHIR validation service |
+| `FHIR_IG` | `hl7.fhir.us.core#6.1.0` | Implementation Guide loaded for validation |
+| `FHIR_SV` | `4.0.1` | FHIR spec version |
+
+---
+
+## FHIR validation
+
+After transforming a canonical sample to FHIR, the Workspace offers a **Validate FHIR** step that
+checks the output against a US Core profile (or base FHIR R4).
+
+> **The generated resource is sent to HL7's public validator at `validator.fhir.org`.**
+> coco-flow only ever produces **synthetic** data, so nothing sensitive leaves the app. If you
+> would rather not depend on a public service, point `VALIDATOR_API_URL` at your own
+> [validator-wrapper](https://github.com/hapifhir/org.hl7.fhir.validator-wrapper) instance — no
+> code changes are needed. Note it needs ~2 GB RAM.
+
+`/api/fhir-validate` is handled by **Express**, not FastAPI. In production `server/index.ts` mounts
+it ahead of the FastAPI proxy; in dev the same router is mounted into the Vite dev server (see
+`vite.config.ts`), because Vite's `/api` proxy would otherwise forward it to FastAPI and 404.
+
+Each resource is validated against **its own US Core 6.1.0 profile**, chosen by resource type
+(`Patient` → `us-core-patient`, `Practitioner` → `us-core-practitioner`, and so on), and reported
+separately with its own pass/fail and issue list. Custom XSLT output has no resource-type contract,
+so it offers a two-option profile picker instead.
+
+Types where US Core 6.1.0 defines **no** profile (`ExplanationOfBenefit`, `Claim`, `InsurancePlan`,
+`MedicationKnowledge`, `List`, `HealthcareService`, `OrganizationAffiliation`) fall back to base
+FHIR R4. So do types where US Core defines **several** and the resource type alone can't
+disambiguate: `Observation` (22 profiles), `Condition` (2), `DiagnosticReport` (2).
+
+Three details worth knowing:
+
+- The validator caches a loaded engine per session. A cold session takes ~30–50 s while it loads
+  US Core; after that, calls are sub-second. Express warms a session on boot so the first click is
+  fast, and caches results per (resource, profile).
+- `validator.fhir.org` sits behind nginx with a **~130 s gateway timeout**. Loading definitions for
+  a new resource type can take most of that on its own (a cold `PractitionerRole` measured ~120 s),
+  so a batch of resources reliably 504s. Express therefore sends **one request per resource**,
+  sequentially, reusing the warmed session.
+- A 504 doesn't mean the upstream gave up — it keeps loading in the background. Failed requests are
+  retried up to twice with backoff, which normally lands on a now-warm engine and returns instantly.
+- Terminology validation cannot be disabled, so occasional
+  `Error performing tx5 operation 'validate-code: timeout'` **warnings** from `tx.fhir.org` are
+  expected. They are warnings, not errors, and do not fail validation.
 
 ---
 

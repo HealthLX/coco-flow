@@ -1,0 +1,324 @@
+import express from 'express'
+import { createHash } from 'crypto'
+
+const VALIDATOR_API_URL = (process.env.VALIDATOR_API_URL ?? 'https://validator.fhir.org').replace(
+  /\/+$/,
+  '',
+)
+const FHIR_IG = process.env.FHIR_IG ?? 'hl7.fhir.us.core#6.1.0'
+const FHIR_SV = process.env.FHIR_SV ?? '4.0.1'
+const TX_SERVER = 'http://tx.fhir.org'
+
+// validator.fhir.org sits behind nginx with a ~130s gateway timeout: a cold request that
+// runs longer comes back as a 504. Loading definitions for a new resource type can take
+// most of that on its own (a cold PractitionerRole measured 120s), so we send one file per
+// request rather than batching, and give up before nginx does.
+const TIMEOUT_MS = 120_000
+const CACHE_MAX = 50
+
+// A 504/timeout does not mean the upstream gave up — it keeps loading in the background.
+// Retrying usually lands on a now-warm engine and returns in well under a second.
+const MAX_ATTEMPTS = 3
+const RETRY_DELAY_MS = 2_000
+
+// ── Types ──────────────────────────────────────────────────────────────────
+
+export interface ValidationIssue {
+  message: string
+  path?: string | null
+  line?: number | null
+}
+
+/** Validation outcome for a single FHIR resource. */
+export interface FhirFileValidation {
+  fileName: string
+  /** Profile URL used, or a label when validated against base FHIR R4. */
+  schema: string
+  valid: boolean
+  error_count: number
+  errors: ValidationIssue[]
+}
+
+export interface FhirValidationResponse {
+  /** True only when every resource is valid. */
+  valid: boolean
+  error_count: number
+  files: FhirFileValidation[]
+}
+
+export interface FileToValidate {
+  fileName: string
+  xml: string
+  /** Profile canonical for this resource; null validates against base FHIR R4. */
+  profile: string | null
+}
+
+/** Describes the upstream call, so the UI can show what it is doing while it runs. */
+export interface ValidatorConfig {
+  endpoint: string
+  method: 'POST'
+  fhirVersion: string
+  igs: string[]
+  txServer: string
+  /** True once a validation engine is loaded upstream, so requests return in ~0.5s. */
+  sessionActive: boolean
+  timeoutMs: number
+  maxAttempts: number
+}
+
+type IssueLevel = 'FATAL' | 'ERROR' | 'WARNING' | 'INFORMATION' | 'NULL'
+
+interface UpstreamIssue {
+  message?: string
+  location?: string | null
+  line?: number | null
+  level?: IssueLevel
+}
+
+interface UpstreamResponse {
+  outcomes?: { issues?: UpstreamIssue[] }[]
+  sessionId?: string
+}
+
+export class ValidatorUnavailableError extends Error {
+  constructor(
+    message: string,
+    readonly retryable = false,
+  ) {
+    super(message)
+  }
+}
+
+// ── Session ────────────────────────────────────────────────────────────────
+
+// The upstream caches a loaded validation engine per session. Reusing the id
+// is the difference between a ~50s request and a ~0.5s one.
+let sessionId: string | null = null
+
+// The client fans out one request per resource, so without a gate every request in the
+// first wave would send `sessionId: null` and open its own engine. Callers wait on this
+// single in-flight handshake instead.
+let warmPromise: Promise<void> | null = null
+
+// ── Result cache ───────────────────────────────────────────────────────────
+
+// Keyed per (resource, profile), so re-validating a multi-resource transform only
+// re-requests the parts that actually changed.
+const cache = new Map<string, ValidationIssue[]>()
+
+function cacheKey(xml: string, profile: string | null): string {
+  return createHash('sha256')
+    .update(profile ?? '')
+    .update(' ')
+    .update(xml)
+    .digest('hex')
+}
+
+function cacheSet(key: string, value: ValidationIssue[]): void {
+  if (cache.size >= CACHE_MAX) {
+    const oldest = cache.keys().next().value
+    if (oldest !== undefined) cache.delete(oldest)
+  }
+  cache.set(key, value)
+}
+
+// ── Upstream call ──────────────────────────────────────────────────────────
+
+async function callValidator(file: FileToValidate, profile: string | null): Promise<UpstreamResponse> {
+  const body = {
+    sessionId,
+    validationContext: {
+      sv: FHIR_SV,
+      igs: [FHIR_IG],
+      profiles: profile ? [profile] : [],
+      txServer: TX_SERVER,
+    },
+    filesToValidate: [{ fileName: file.fileName, fileContent: file.xml, fileType: 'xml' }],
+  }
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
+  let res: Response
+  try {
+    res = await fetch(`${VALIDATOR_API_URL}/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    })
+  } catch (err) {
+    const timedOut = err instanceof Error && err.name === 'AbortError'
+    throw new ValidatorUnavailableError(
+      timedOut
+        ? `Validation timed out after ${TIMEOUT_MS / 1000}s`
+        : `Could not reach ${VALIDATOR_API_URL}`,
+      timedOut,
+    )
+  } finally {
+    clearTimeout(timer)
+  }
+
+  if (!res.ok) {
+    // 5xx here is usually the gateway giving up while the engine is still loading.
+    throw new ValidatorUnavailableError(`Validator returned ${res.status}`, res.status >= 500)
+  }
+
+  const json = (await res.json()) as UpstreamResponse
+  if (json.sessionId) sessionId = json.sessionId
+  return json
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/**
+ * Resolves once a session exists, collapsing a concurrent first wave onto one handshake.
+ * Never rejects: if the handshake fails the caller still proceeds, cold, and surfaces the
+ * real error from its own request rather than a warm-up artifact.
+ */
+function ensureSession(): Promise<void> {
+  if (sessionId) return Promise.resolve()
+  if (!warmPromise) {
+    const started = Date.now()
+    warmPromise = callValidator(
+      {
+        fileName: 'warmup.xml',
+        xml: '<Patient xmlns="http://hl7.org/fhir"><id value="w"/></Patient>',
+        profile: null,
+      },
+      null,
+    )
+      .then(() => {
+        console.log(`[fhir-validate] session warmed in ${((Date.now() - started) / 1000).toFixed(1)}s`)
+      })
+      .catch((err: unknown) => {
+        // Let the next caller try again rather than latching the failure forever.
+        warmPromise = null
+        const msg = err instanceof Error ? err.message : String(err)
+        console.warn(`[fhir-validate] session warm-up failed: ${msg}`)
+      })
+  }
+  return warmPromise
+}
+
+async function callWithRetry(file: FileToValidate, profile: string | null): Promise<UpstreamResponse> {
+  await ensureSession()
+  let last: ValidatorUnavailableError | undefined
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      return await callValidator(file, profile)
+    } catch (err) {
+      if (!(err instanceof ValidatorUnavailableError) || !err.retryable) throw err
+      last = err
+      if (attempt < MAX_ATTEMPTS) {
+        console.warn(`[fhir-validate] ${file.fileName}: ${err.message} — retrying`)
+        await sleep(RETRY_DELAY_MS * attempt)
+      }
+    }
+  }
+  throw last ?? new ValidatorUnavailableError('Validation failed')
+}
+
+// ── Mapping ────────────────────────────────────────────────────────────────
+
+function errorsFrom(res: UpstreamResponse): ValidationIssue[] {
+  const errors: ValidationIssue[] = []
+  for (const outcome of res.outcomes ?? []) {
+    for (const issue of outcome.issues ?? []) {
+      if (issue.level !== 'ERROR' && issue.level !== 'FATAL') continue
+      errors.push({
+        message: issue.message ?? 'Unknown validation error',
+        path: issue.location ?? null,
+        line: issue.line ?? null,
+      })
+    }
+  }
+  return errors
+}
+
+// ── Public API ─────────────────────────────────────────────────────────────
+
+async function validateOne(file: FileToValidate, profile: string | null): Promise<ValidationIssue[]> {
+  const key = cacheKey(file.xml, profile)
+  const hit = cache.get(key)
+  if (hit) {
+    console.log(`[fhir-validate] cache hit: ${file.fileName}`)
+    return hit
+  }
+  const errors = errorsFrom(await callWithRetry(file, profile))
+  cacheSet(key, errors)
+  return errors
+}
+
+export async function validateFhir(files: FileToValidate[]): Promise<FhirValidationResponse> {
+  // One request per file: batching them all exceeds the upstream gateway timeout on a cold
+  // engine. Sequential, so each call reuses the session the previous one warmed. Each
+  // resource carries its own profile, since US Core defines a different one per type.
+  const results: FhirFileValidation[] = []
+  for (const file of files) {
+    const errors = await validateOne(file, file.profile)
+    results.push({
+      fileName: file.fileName,
+      schema: file.profile ?? 'FHIR R4 (base)',
+      valid: errors.length === 0,
+      error_count: errors.length,
+      errors,
+    })
+  }
+
+  return {
+    valid: results.every((r) => r.valid),
+    error_count: results.reduce((n, r) => n + r.error_count, 0),
+    files: results,
+  }
+}
+
+/** Fire-and-forget on boot: establishes a session so the first real click is fast. */
+export function warmSession(): Promise<void> {
+  return ensureSession()
+}
+
+/** What the UI shows about the upstream call it is making. Mirrors `callValidator`'s body. */
+export function validatorConfig(): ValidatorConfig {
+  return {
+    endpoint: `${VALIDATOR_API_URL}/validate`,
+    method: 'POST',
+    fhirVersion: FHIR_SV,
+    igs: [FHIR_IG],
+    txServer: TX_SERVER,
+    sessionActive: sessionId !== null,
+    timeoutMs: TIMEOUT_MS,
+    maxAttempts: MAX_ATTEMPTS,
+  }
+}
+
+// ── Router ─────────────────────────────────────────────────────────────────
+
+export function fhirValidatorRouter(): express.Router {
+  const router = express.Router()
+
+  router.get('/config', (_req, res) => {
+    res.json(validatorConfig())
+  })
+
+  router.post('/', express.json({ limit: '10mb' }), async (req, res) => {
+    const { files } = (req.body ?? {}) as { files?: FileToValidate[] }
+    if (!Array.isArray(files) || files.length === 0) {
+      res.status(400).json({ error: 'No files to validate' })
+      return
+    }
+    try {
+      res.json(await validateFhir(files.map((f) => ({ ...f, profile: f.profile ?? null }))))
+    } catch (err) {
+      if (err instanceof ValidatorUnavailableError) {
+        console.error('[fhir-validate]', err.message)
+        res.status(503).json({ error: 'FHIR validation service unavailable', detail: err.message })
+        return
+      }
+      const detail = err instanceof Error ? err.message : String(err)
+      console.error('[fhir-validate] unexpected:', detail)
+      res.status(500).json({ error: 'FHIR validation failed', detail })
+    }
+  })
+
+  return router
+}

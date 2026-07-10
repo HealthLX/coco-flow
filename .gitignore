@@ -9,3 +9,6 @@ dist-server/
 # Generated XML artifacts — stored locally, not committed
 data/canonical-samples/*.xml
 data/fhir-samples/*.xml
+
+# TypeScript incremental build info
+*.tsbuildinfo

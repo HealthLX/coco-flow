@@ -2,7 +2,7 @@ export interface HistoryEntry {
   id: string
   timestamp: string
   label: string
-  actionType: 'generated' | 'transformed' | 'validated'
+  actionType: 'generated' | 'transformed' | 'validated' | 'fhir-validated'
   fileType: 'canonical' | 'fhir'
   serverFilename: string | null
 }
