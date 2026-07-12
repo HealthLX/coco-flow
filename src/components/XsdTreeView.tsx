@@ -20,12 +20,12 @@ export default function XsdTreeView({ xsd, coreXsd, title }: XsdTreeViewProps) {
 
   return (
     <div className="card overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-gray-50">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-line bg-surface-2">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-gray-900">{title}</span>
+          <span className="text-sm font-semibold text-fg">{title}</span>
           <span className="badge-xsd">Tree</span>
           {!parsed.error && (
-            <span className="text-xs text-gray-900">
+            <span className="text-xs text-fg-muted">
               {parsed.roots.length} root element{parsed.roots.length === 1 ? '' : 's'}
             </span>
           )}
@@ -33,7 +33,7 @@ export default function XsdTreeView({ xsd, coreXsd, title }: XsdTreeViewProps) {
       </div>
 
       {parsed.error ? (
-        <div className="flex items-start gap-2 text-xs text-amber-900 bg-amber-50 m-3 border border-amber-200 rounded-lg p-3">
+        <div className="flex items-start gap-2 text-xs text-warn bg-warn-bg m-3 border border-warn-border rounded-lg p-3">
           <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
           {parsed.error}
         </div>
@@ -88,14 +88,14 @@ function TreeRow({ node, depth, parsed, ancestorTypes, defaultExpanded = false }
     <div>
       <div
         className={`group flex items-center gap-2 pr-3 py-1 text-sm transition-colors ${
-          expandable ? 'cursor-pointer hover:bg-gray-50' : ''
+          expandable ? 'cursor-pointer hover:bg-surface-2' : ''
         }`}
         style={{ paddingLeft }}
         onClick={expandable ? () => setExpanded((v) => !v) : undefined}
         title={tooltip}
       >
         {/* Expand/collapse affordance */}
-        <span className="flex-shrink-0 w-3.5 text-gray-900">
+        <span className="flex-shrink-0 w-3.5 text-fg-body">
           {expandable ? (
             expanded ? (
               <ChevronDown className="w-3.5 h-3.5" />
@@ -103,30 +103,30 @@ function TreeRow({ node, depth, parsed, ancestorTypes, defaultExpanded = false }
               <ChevronRight className="w-3.5 h-3.5" />
             )
           ) : (
-            <span className="block w-1 h-1 mx-auto rounded-full bg-gray-300" />
+            <span className="block w-1 h-1 mx-auto rounded-full bg-fg-subtle" />
           )}
         </span>
 
         {node.kind === 'inherited' ? (
-          <span className="text-xs italic text-gray-900">{node.name}</span>
+          <span className="text-xs italic text-fg-body">{node.name}</span>
         ) : node.kind === 'choice' ? (
           <>
-            <span className="text-xs font-mono font-semibold text-amber-700">choice</span>
-            <span className="text-[10px] font-mono text-gray-900">{cardinality(node)}</span>
+            <span className="text-xs font-mono font-semibold text-warn">choice</span>
+            <span className="text-[10px] font-mono text-fg-body">{cardinality(node)}</span>
             {node.documentation && (
-              <span className="text-xs text-gray-900 truncate min-w-0">{node.documentation}</span>
+              <span className="text-xs text-fg-muted truncate min-w-0">{node.documentation}</span>
             )}
           </>
         ) : (
           <>
             <span
               className={`font-mono text-xs flex-shrink-0 ${
-                expandable ? 'text-coco-red font-semibold' : 'text-gray-900'
+                expandable ? 'text-brand font-semibold' : 'text-fg-body'
               }`}
             >
               {node.name}
             </span>
-            <span className="text-[10px] font-mono text-gray-900 flex-shrink-0">
+            <span className="text-[10px] font-mono text-fg-body flex-shrink-0">
               {cardinality(node)}
             </span>
             {node.type && (
@@ -134,7 +134,7 @@ function TreeRow({ node, depth, parsed, ancestorTypes, defaultExpanded = false }
                 className={`text-[10px] font-mono px-1.5 py-0.5 rounded flex-shrink-0 ${
                   node.typeOrigin === 'local'
                     ? 'bg-purple-50 text-purple-700'
-                    : 'bg-gray-100 text-gray-900'
+                    : 'bg-surface-3 text-fg-body'
                 }`}
               >
                 {node.type}
@@ -146,10 +146,10 @@ function TreeRow({ node, depth, parsed, ancestorTypes, defaultExpanded = false }
               </span>
             ) : null}
             {isRecursive && (
-              <RotateCcw className="w-3 h-3 text-gray-400 flex-shrink-0" aria-label="recursive type" />
+              <RotateCcw className="w-3 h-3 text-fg-subtle flex-shrink-0" aria-label="recursive type" />
             )}
             {node.documentation && (
-              <span className="text-xs text-gray-900 truncate min-w-0">{node.documentation}</span>
+              <span className="text-xs text-fg-muted truncate min-w-0">{node.documentation}</span>
             )}
           </>
         )}

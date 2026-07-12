@@ -1,0 +1,149 @@
+/**
+ * Design tokens.
+ *
+ * Values are RGB channel triplets, not hex — that is the only form Tailwind can wrap in
+ * `rgb(var(--x) / <alpha-value>)`, which is what lets `bg-brand/10` and dark-mode overrides
+ * both work off the same variable.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* Brand — unchanged from the existing identity */
+  --brand: 192 57 43; /* #c0392b */
+  --brand-hover: 150 40 27; /* #96281b */
+  --brand-fg: 255 255 255;
+  --accent: 230 0 115; /* #E60073 — the "flowing/active" accent */
+  --navy: 13 27 42; /* #0d1b2a */
+  --navy-2: 26 46 66; /* #1a2e42 */
+
+  /* Surfaces — light is the product's default, so this ramp is the one that has to be right.
+     Cool neutrals, a hair away from pure grey, so white cards read as raised rather than flush. */
+  --bg: 241 243 246;
+  --surface: 255 255 255;
+  --surface-2: 247 249 251;
+  --surface-3: 238 242 246;
+  --border: 224 230 237;
+  --border-strong: 197 207 218;
+
+  /* Type hierarchy — four deliberate steps, each a clear notch below the last */
+  --fg: 15 23 42; /* headings, data values */
+  --fg-body: 51 65 85; /* prose */
+  --fg-muted: 100 116 139; /* labels, table headers, metadata */
+  --fg-subtle: 148 163 184; /* hints, placeholders, disabled */
+
+  /* Semantic status */
+  --ok: 22 163 74;
+  --ok-bg: 240 253 244;
+  --ok-border: 187 247 208;
+  --warn: 217 119 6;
+  --warn-bg: 255 251 235;
+  --warn-border: 253 230 138;
+  --err: 220 38 38;
+  --err-bg: 254 242 242;
+  --err-border: 254 202 202;
+
+  /* Artifact kinds — already implicit in the badge colors */
+  --canonical: 37 99 235;
+  --canonical-bg: 239 246 255;
+  --canonical-border: 191 219 254;
+  --fhir: 22 163 74;
+  --fhir-bg: 240 253 244;
+  --fhir-border: 187 247 208;
+  --xsd: 147 51 234;
+  --xsd-bg: 250 245 255;
+  --xsd-border: 233 213 255;
+  --xslt: 217 119 6;
+  --xslt-bg: 255 251 235;
+  --xslt-border: 253 230 138;
+
+  /* XSD diagram (was hardcoded in index.css) */
+  --xsd-canvas: 251 252 254;
+  --xsd-line: 182 194 212;
+  --xsd-box-border: 185 194 207;
+  --xsd-box-bg: 255 255 255;
+  --xsd-name-from: 234 242 255;
+  --xsd-name-to: 211 227 255;
+  --xsd-name-fg: 30 58 95;
+  --xsd-doc-bg: 255 253 243;
+  --xsd-doc-border: 236 228 199;
+  --xsd-doc-fg: 107 100 80;
+
+  /* Motion */
+  --dur-fast: 120ms;
+  --dur: 200ms;
+  --dur-slow: 420ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.dark {
+  color-scheme: dark;
+
+  /* Brand red is lifted so it keeps contrast against dark surfaces */
+  --brand: 224 90 74;
+  --brand-hover: 236 112 96;
+  --brand-fg: 255 255 255;
+  --accent: 255 61 152;
+
+  --bg: 10 15 22;
+  --surface: 17 24 34;
+  --surface-2: 24 33 46;
+  --surface-3: 31 41 55;
+  --border: 45 58 74;
+  --border-strong: 71 85 105;
+
+  --fg: 241 245 249;
+  --fg-body: 203 213 225;
+  --fg-muted: 148 163 184;
+  --fg-subtle: 100 116 139;
+
+  --ok: 74 222 128;
+  --ok-bg: 5 46 22;
+  --ok-border: 22 101 52;
+  --warn: 251 191 36;
+  --warn-bg: 60 42 6;
+  --warn-border: 133 92 12;
+  --err: 248 113 113;
+  --err-bg: 60 20 20;
+  --err-border: 133 32 32;
+
+  --canonical: 96 165 250;
+  --canonical-bg: 23 37 66;
+  --canonical-border: 37 66 116;
+  --fhir: 74 222 128;
+  --fhir-bg: 5 46 22;
+  --fhir-border: 22 101 52;
+  --xsd: 192 132 252;
+  --xsd-bg: 44 24 66;
+  --xsd-border: 82 42 122;
+  --xslt: 251 191 36;
+  --xslt-bg: 60 42 6;
+  --xslt-border: 133 92 12;
+
+  --xsd-canvas: 13 19 28;
+  --xsd-line: 62 79 99;
+  --xsd-box-border: 60 76 95;
+  --xsd-box-bg: 22 30 42;
+  --xsd-name-from: 32 47 70;
+  --xsd-name-to: 24 37 58;
+  --xsd-name-fg: 186 210 240;
+  --xsd-doc-bg: 44 39 22;
+  --xsd-doc-border: 82 71 38;
+  --xsd-doc-fg: 218 205 168;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur: 0ms;
+    --dur-slow: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

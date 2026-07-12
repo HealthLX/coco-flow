@@ -53,15 +53,15 @@ export default function XmlPreview({
 
   return (
     <div className="card overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-gray-50">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-line bg-surface-2">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-gray-900">{title}</span>
+          <span className="text-sm font-semibold text-fg">{title}</span>
           {badgeClass && badgeLabel && <span className={badgeClass}>{badgeLabel}</span>}
-          <span className="text-xs text-gray-900">{lines.length} lines</span>
+          <span className="text-xs text-fg-muted">{lines.length} lines</span>
         </div>
         <div className="flex items-center gap-2">
           {allowJson && jsonContent && (
-            <div className="flex items-center rounded border border-gray-200 overflow-hidden">
+            <div className="flex items-center rounded border border-line overflow-hidden">
               {(['xml', 'json'] as const).map((v) => (
                 <button
                   key={v}
@@ -71,8 +71,8 @@ export default function XmlPreview({
                   }}
                   className={`px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide transition-colors ${
                     view === v
-                      ? 'bg-coco-red text-white'
-                      : 'bg-white text-gray-900 hover:text-gray-900'
+                      ? 'bg-brand text-white'
+                      : 'bg-surface text-fg-body hover:text-fg'
                   }`}
                 >
                   {v}
@@ -82,11 +82,11 @@ export default function XmlPreview({
           )}
           <button
             onClick={copy}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium text-gray-900 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium text-fg hover:text-fg hover:bg-surface-3 transition-colors"
           >
             {copied ? (
               <>
-                <Check className="w-3.5 h-3.5 text-green-500" />
+                <Check className="w-3.5 h-3.5 text-ok" />
                 Copied
               </>
             ) : (
@@ -100,19 +100,19 @@ export default function XmlPreview({
       </div>
 
       {showingJson && (
-        <div className="px-4 py-1.5 text-[11px] text-amber-700 bg-amber-50 border-b border-amber-100">
+        <div className="px-4 py-1.5 text-[11px] text-warn bg-warn-bg border-b border-warn-border">
           Structural JSON view, not spec-canonical FHIR JSON. Conformant FHIR JSON comes from the
           HealthLX mappings.
         </div>
       )}
 
       <pre
-        className="text-xs font-mono text-gray-900 p-4 overflow-auto leading-relaxed"
-        style={{ maxHeight: '420px', backgroundColor: '#fafafa' }}
+        className="text-xs font-mono text-fg-body bg-surface-2 p-4 overflow-auto leading-relaxed"
+        style={{ maxHeight: '420px' }}
       >
         {displayContent}
         {isLong && !expanded && (
-          <span className="block text-gray-900 italic mt-1">
+          <span className="block text-fg-subtle italic mt-1">
             … {lines.length - COLLAPSED_LINES} more lines hidden
           </span>
         )}
@@ -121,7 +121,7 @@ export default function XmlPreview({
       {isLong && (
         <button
           onClick={() => setExpanded((v) => !v)}
-          className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-gray-900 hover:text-gray-900 hover:bg-gray-50 border-t border-gray-100 transition-colors"
+          className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-fg hover:text-fg hover:bg-surface-2 border-t border-line transition-colors"
         >
           {expanded ? (
             <>

@@ -1,3 +1,4 @@
+import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import express from 'express'
@@ -30,6 +31,13 @@ function fhirValidatorPlugin(): Plugin {
 
 export default defineConfig({
   plugins: [react(), fhirValidatorPlugin()],
+  // tsconfig declares this path; without a matching alias an `@/` import type-checks
+  // and then fails to resolve at runtime.
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
   server: {
     port: 5173,
     proxy: {

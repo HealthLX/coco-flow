@@ -10,6 +10,19 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
       rel="stylesheet"
     />
+    <script>
+      // Light is the default; dark is opt-in and only if the user has chosen it before.
+      // The OS preference is deliberately NOT consulted. Applied before first paint so a
+      // dark-mode user doesn't get a white flash. Kept in sync with context/ThemeContext.tsx.
+      ;(function () {
+        try {
+          var dark = localStorage.getItem('coco-flow-theme') === 'dark'
+          document.documentElement.classList.toggle('dark', dark)
+        } catch (e) {
+          /* private mode — stay light */
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -8,9 +8,9 @@ const SIZE: Record<SpinnerSize, string> = {
 
 const TONE: Record<SpinnerTone, string> = {
   white: 'border-white/30 border-t-white',
-  red: 'border-coco-red/30 border-t-coco-red',
-  gray: 'border-gray-300 border-t-gray-600',
-  green: 'border-green-200 border-t-green-600',
+  red: 'border-brand/30 border-t-brand',
+  gray: 'border-line-strong border-t-fg-muted',
+  green: 'border-ok/30 border-t-ok',
 }
 
 interface SpinnerProps {

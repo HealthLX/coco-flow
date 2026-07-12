@@ -779,6 +779,22 @@ export async function downloadTransform(filename: string): Promise<void> {
   return downloadFile(`/transforms/${filename}`, baseName)
 }
 
+/**
+ * GET /transforms/{filename} as text.
+ *
+ * Needed because there is no route that transforms *posted* canonical XML with a built-in
+ * build's XSLTs — /transform/{target}/content ignores the body and transforms the file on
+ * disk. To transform edited XML we fetch each XSLT and post it to /transform/upload
+ * ourselves. `downloadTransform` can't be reused: it triggers a browser save.
+ */
+export async function fetchTransformContent(filename: string): Promise<string> {
+  const res = await fetch(`${BASE}/transforms/${filename}`)
+  if (!res.ok) {
+    throw new Error(`Could not read transform ${filename}: ${res.status} ${res.statusText}`)
+  }
+  return res.text()
+}
+
 // ── Custom XSD upload ─────────────────────────────────────────────────────────
 
 /**
