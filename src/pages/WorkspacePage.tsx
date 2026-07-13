@@ -22,7 +22,6 @@ import {
   validateCanonicalXml,
   validateCustomXml,
   validateFhirXml,
-  explodeFhirXml,
   getFhirValidatorConfig,
   FHIR_PROFILE_OPTIONS,
   usCoreProfileFor,
@@ -34,239 +33,28 @@ import {
   selectProviderDirectoryBuild,
 } from '../services/api'
 import type {
-  Build,
   FhirTransformResult,
-  FhirFileValidation,
-  FhirValidatorConfig,
   ValidationResult as ValidationResultData,
 } from '../services/api'
+import {
+  CANONICALS,
+  FHIR_VALIDATE_CONCURRENCY,
+  canonicalSampleFilename,
+  deriveFhirDocs,
+  downloadXmlFromMemory,
+  fhirExportBasename,
+  profileLabel,
+  runPool,
+  schemaHasBuiltinTransforms,
+  type FhirDoc,
+  type FhirRowState,
+} from '../pipeline/derive'
 import { addToHistory } from '../lib/history'
+import { storeFileTemp, retrieveTempFile } from '../lib/tempFiles'
 import Spinner from '../components/Spinner'
-import { useElapsedSeconds, formatSeconds } from '../hooks/useElapsedSeconds'
 import XmlPreview from '../components/XmlPreview'
 import ValidationResult from '../components/ValidationResult'
-import { storeFileTemp, retrieveTempFile } from './HomePage'
-
-// ── Canonical definitions ─────────────────────────────────────────────────
-
-interface CanonicalDef {
-  name: string
-  label: string
-  schemaFile: string
-  description: string
-}
-
-const CANONICALS: CanonicalDef[] = [
-  {
-    name: 'roster',
-    label: 'Roster',
-    schemaFile: 'Roster.xsd',
-    description: 'Member demographics, coverage, addresses and related persons',
-  },
-  {
-    name: 'eob',
-    label: 'EOB',
-    schemaFile: 'EOB.xsd',
-    description: 'Explanation of Benefits: claims and adjudication data',
-  },
-  {
-    name: 'formulary',
-    label: 'Formulary',
-    schemaFile: 'Formulary.xsd',
-    description: 'Drug formulary entries and medication coverage plans',
-  },
-  {
-    name: 'providerdirectory',
-    label: 'Provider Directory',
-    schemaFile: 'Provider-Directory.xsd',
-    description:
-      'Practitioner and organization providers in one canonical file: NPIs, specialties, networks',
-  },
-  {
-    name: 'clinical',
-    label: 'Clinical',
-    schemaFile: 'Clinical.xsd',
-    description: 'Clinical patient data, diagnoses, procedures and encounters',
-  },
-]
-
-/** Schema has at least one build with XSLT (transform_file or transform_files in YAML). */
-function schemaHasBuiltinTransforms(builds: Build[], canonicalName: string): boolean {
-  const want = normCanonicalId(canonicalName)
-  return builds.some((b) => normCanonicalId(b.canonical_name) === want && buildHasTransforms(b))
-}
-
-function downloadXmlFromMemory(xml: string, filename: string) {
-  const blob = new Blob([xml], { type: 'application/xml' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
-}
-
-function canonicalSampleFilename(canonicalName: string): string {
-  if (canonicalName === 'providerdirectory') return 'provider-directory-sample.xml'
-  return `${canonicalName}-sample.xml`
-}
-
-/** Base name for single-FHIR download/preview titles (multipart uses each part filename from the API). */
-function fhirExportBasename(canonicalName: string): string {
-  if (canonicalName === 'providerdirectory') return 'providerdirectory'
-  return canonicalName
-}
-
-/** "…/us-core-patient|6.1.0" → "us-core-patient|6.1.0"; base-R4 label passes through. */
-function profileLabel(schema: string): string {
-  return schema.includes('/') ? (schema.split('/').pop() ?? schema) : schema
-}
-
-/** One resource queued for validation, with the profile it will be checked against. */
-interface FhirDoc {
-  fileName: string
-  xml: string
-  resourceType: string | null
-  profile: string | null
-}
-
-/** Each resource validates on its own, so each carries its own status and timing. */
-type FhirRowState =
-  | { status: 'queued' }
-  | { status: 'running'; startedAt: number }
-  | { status: 'done'; elapsedMs: number; result: FhirFileValidation }
-  | { status: 'error'; elapsedMs: number; message: string }
-
-/** Upstream is a shared public validator, so keep only a few resources in flight at once. */
-const FHIR_VALIDATE_CONCURRENCY = 4
-
-async function runPool<T>(
-  items: T[],
-  limit: number,
-  worker: (item: T) => Promise<void>,
-): Promise<void> {
-  let next = 0
-  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) {
-      await worker(items[next++])
-    }
-  })
-  await Promise.all(runners)
-}
-
-/**
- * The upstream request behind this row. Stays visible after the call settles, so a passing
- * result still shows what it was actually checked against.
- */
-function ValidatorCallMetadata({
-  doc,
-  config,
-  state,
-  liveSeconds,
-}: {
-  doc: FhirDoc
-  config: FhirValidatorConfig | undefined
-  state: FhirRowState
-  liveSeconds: number | null
-}) {
-  if (!config || state.status === 'queued') return null
-  // A cold engine loads the IG before it can validate anything, which dominates the wait.
-  const coldStart = state.status === 'running' && !config.sessionActive && (liveSeconds ?? 0) > 3
-
-  return (
-    <div className="mb-2 rounded-lg border border-gray-200 bg-gray-50 p-2.5 font-mono text-[11px] leading-relaxed text-gray-600">
-      <div className="text-gray-900">
-        {config.method} {config.endpoint}
-      </div>
-      <div>
-        sv={config.fhirVersion} · igs={config.igs.join(', ')} · txServer={config.txServer}
-      </div>
-      <div>profiles={doc.profile ? profileLabel(doc.profile) : '[] (base FHIR R4)'}</div>
-      <div>
-        filesToValidate=[{doc.fileName}] · timeout={config.timeoutMs / 1000}s · attempts&le;
-        {config.maxAttempts}
-      </div>
-
-      {coldStart && (
-        <div className="mt-1 text-amber-700">
-          cold engine — loading {config.igs[0]} definitions, this first call can take ~50s
-        </div>
-      )}
-
-      {state.status === 'done' && (
-        <div className="mt-1 text-gray-500">
-          → {state.result.error_count} issue{state.result.error_count === 1 ? '' : 's'} in{' '}
-          {formatSeconds(state.elapsedMs / 1000)}
-        </div>
-      )}
-      {state.status === 'error' && (
-        <div className="mt-1 text-red-700">
-          → request failed after {formatSeconds(state.elapsedMs / 1000)}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function FhirValidationRow({
-  doc,
-  state,
-  config,
-}: {
-  doc: FhirDoc
-  state: FhirRowState
-  config: FhirValidatorConfig | undefined
-}) {
-  const liveSeconds = useElapsedSeconds(state.status === 'running' ? state.startedAt : null)
-
-  return (
-    <div>
-      <div className="flex items-center gap-2 mb-1.5">
-        <span className="badge-fhir">{doc.resourceType ?? 'FHIR'}</span>
-        <span className="text-xs font-mono text-gray-900">{doc.fileName}</span>
-
-        <span className="ml-auto flex items-center gap-1.5 text-xs">
-          {state.status === 'queued' && <span className="text-gray-400">Queued</span>}
-          {state.status === 'running' && (
-            <>
-              <Spinner size="sm" tone="green" />
-              <span className="text-gray-600 tabular-nums">
-                {liveSeconds === null ? '' : formatSeconds(liveSeconds)}
-              </span>
-            </>
-          )}
-          {state.status !== 'queued' && state.status !== 'running' && (
-            <span className="text-gray-500 tabular-nums">
-              {formatSeconds(state.elapsedMs / 1000)}
-            </span>
-          )}
-        </span>
-      </div>
-
-      <ValidatorCallMetadata doc={doc} config={config} state={state} liveSeconds={liveSeconds} />
-
-      {state.status === 'done' && (
-        <ValidationResult
-          result={{
-            valid: state.result.valid,
-            schema: profileLabel(state.result.schema),
-            error_count: state.result.error_count,
-            errors: state.result.errors,
-          }}
-        />
-      )}
-
-      {state.status === 'error' && (
-        <div className="flex items-start gap-2 text-xs text-red-800 bg-red-50 border border-red-200 rounded-lg p-3">
-          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-red-600" />
-          {state.message}
-        </div>
-      )}
-    </div>
-  )
-}
+import FhirValidationRow from '../components/fhir/FhirValidationRow'
 
 // ── Component ─────────────────────────────────────────────────────────────
 
@@ -369,23 +157,10 @@ export default function WorkspacePage() {
     return usCoreProfileFor(resourceType)
   }
 
-  /**
-   * The resources that will be validated, one row each. Drives both the pre-click profile
-   * preview and the post-click rows, so the two cannot drift. Transforms that wrap their
-   * output in a collection element are split here into one resource per child.
-   */
-  const fhirDocs: FhirDoc[] = useMemo(() => {
-    if (!fhirResult) return []
-    const base = selectedCanonical ? fhirExportBasename(selectedCanonical) : 'fhir-output'
-    const documents =
-      fhirResult.kind === 'single'
-        ? [{ fileName: `${base}-fhir.xml`, xml: fhirResult.xml }]
-        : fhirResult.parts.map((p) => ({ fileName: p.filename, xml: p.xml }))
-
-    return documents
-      .flatMap((d) => explodeFhirXml(d.fileName, d.xml))
-      .map((d) => ({ ...d, profile: profileForResource(d.resourceType) }))
-  }, [fhirResult, selectedCanonical, fhirFromCustomXslt, fhirProfileChoice, configuredFhirProfile])
+  const fhirDocs: FhirDoc[] = useMemo(
+    () => deriveFhirDocs(fhirResult, selectedCanonical, profileForResource),
+    [fhirResult, selectedCanonical, fhirFromCustomXslt, fhirProfileChoice, configuredFhirProfile],
+  )
 
   const fhirValidating = Object.values(fhirRows).some(
     (r) => r.status === 'queued' || r.status === 'running',
@@ -631,14 +406,14 @@ export default function WorkspacePage() {
   return (
     <div className="max-w-4xl mx-auto px-8 py-8 space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-gray-900">Workspace</h1>
-        <p className="text-sm text-gray-900 mt-0.5">
+        <h1 className="text-xl font-bold text-fg">Workspace</h1>
+        <p className="text-sm text-fg-body mt-0.5">
           Select a schema, generate a sample, and optionally transform to FHIR.
         </p>
       </div>
 
       {buildsError && (
-        <div className="flex items-start gap-2 text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg p-3">
+        <div className="flex items-start gap-2 text-xs text-warn bg-warn-bg border border-warn-border rounded-lg p-3">
           <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <div>
             <span className="font-semibold">Could not load sample build config.</span>{' '}
@@ -650,21 +425,21 @@ export default function WorkspacePage() {
 
       {/* ── Step 1: Schema selection ── */}
       <div className="card overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
-          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-coco-red text-white text-xs font-bold flex-shrink-0">
+        <div className="px-5 py-4 border-b border-line flex items-center gap-2">
+          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-brand text-white text-xs font-bold flex-shrink-0">
             1
           </div>
-          <h2 className="text-sm font-semibold text-gray-900">Select Schema</h2>
+          <h2 className="text-sm font-semibold text-fg">Select Schema</h2>
         </div>
 
         {/* Tab strip */}
-        <div className="flex border-b border-gray-100">
+        <div className="flex border-b border-line">
           <button
             onClick={() => handleTabChange('predefined')}
             className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
               selectorTab === 'predefined'
-                ? 'border-coco-red text-coco-red'
-                : 'border-transparent text-gray-900 hover:text-gray-900'
+                ? 'border-brand text-brand'
+                : 'border-transparent text-fg-body hover:text-fg'
             }`}
           >
             CoCo Canonical Schemas
@@ -673,8 +448,8 @@ export default function WorkspacePage() {
             onClick={() => handleTabChange('custom')}
             className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
               selectorTab === 'custom'
-                ? 'border-coco-red text-coco-red'
-                : 'border-transparent text-gray-900 hover:text-gray-900'
+                ? 'border-brand text-brand'
+                : 'border-transparent text-fg-body hover:text-fg'
             }`}
           >
             Upload Custom XSD
@@ -684,15 +459,15 @@ export default function WorkspacePage() {
         {/* Predefined schemas table */}
         {selectorTab === 'predefined' && (
           <div>
-          <div className="divide-y divide-gray-50">
+          <div className="divide-y divide-line">
             {/* Header row */}
-            <div className="grid grid-cols-[auto_1fr_auto_auto] gap-4 px-5 py-2.5 bg-gray-50 border-b border-gray-100">
+            <div className="grid grid-cols-[auto_1fr_auto_auto] gap-4 px-5 py-2.5 bg-surface-2 border-b border-line">
               <div className="w-5" />
-              <div className="text-xs font-semibold text-gray-900 uppercase tracking-wider">Schema</div>
-              <div className="text-xs font-semibold text-gray-900 uppercase tracking-wider w-28 text-right">
+              <div className="text-xs font-semibold text-fg uppercase tracking-wider">Schema</div>
+              <div className="text-xs font-semibold text-fg uppercase tracking-wider w-28 text-right">
                 FHIR Transform
               </div>
-              <div className="text-xs font-semibold text-gray-900 uppercase tracking-wider w-44 text-right">
+              <div className="text-xs font-semibold text-fg uppercase tracking-wider w-44 text-right">
                 XSD File
               </div>
             </div>
@@ -706,21 +481,21 @@ export default function WorkspacePage() {
                 <button
                   key={c.name}
                   onClick={() => handleSelectCanonical(c.name)}
-                  className={`w-full grid grid-cols-[auto_1fr_auto_auto] gap-4 items-center px-5 py-3.5 text-left transition-colors hover:bg-gray-50 ${
+                  className={`w-full grid grid-cols-[auto_1fr_auto_auto] gap-4 items-center px-5 py-3.5 text-left transition-colors hover:bg-surface-2 ${
                     isSelected
-                      ? 'border-l-[3px] bg-red-50/40'
+                      ? 'border-l-[3px] bg-brand/10'
                       : 'border-l-[3px] border-transparent'
                   }`}
-                  style={isSelected ? { borderLeftColor: '#c0392b' } : undefined}
+                  
                 >
                   {/* Radio indicator */}
                   <div
                     className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
-                      isSelected ? 'border-coco-red' : 'border-gray-300'
+                      isSelected ? 'border-brand' : 'border-line-strong'
                     }`}
                   >
                     {isSelected && (
-                      <div className="w-2 h-2 rounded-full bg-coco-red" />
+                      <div className="w-2 h-2 rounded-full bg-brand" />
                     )}
                   </div>
 
@@ -728,25 +503,25 @@ export default function WorkspacePage() {
                   <div>
                     <div
                       className={`text-sm font-semibold ${
-                        isSelected ? 'text-coco-red' : 'text-gray-900'
+                        isSelected ? 'text-brand' : 'text-fg-body'
                       }`}
                     >
                       {c.label}
                     </div>
-                    <div className="text-xs text-gray-900 mt-0.5">{c.description}</div>
+                    <div className="text-xs text-fg-muted mt-0.5">{c.description}</div>
                   </div>
 
                   {/* Transform badge */}
                   <div className="w-28 flex justify-end">
                     {xform === null ? (
-                      <span className="text-xs text-gray-900">…</span>
+                      <span className="text-xs text-fg-muted">…</span>
                     ) : xform ? (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-ok whitespace-nowrap">
                         <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
                         Available
                       </span>
                     ) : (
-                      <span className="text-xs text-gray-400">—</span>
+                      <span className="text-xs text-fg-subtle">—</span>
                     )}
                   </div>
 
@@ -759,8 +534,8 @@ export default function WorkspacePage() {
             })}
           </div>
           {selectedCanonical === 'providerdirectory' && (
-            <div className="px-5 py-3 bg-gray-50/80 border-t border-gray-100">
-              <p className="text-[11px] text-gray-900 max-w-xl leading-relaxed">
+            <div className="px-5 py-3 bg-surface-2/80 border-t border-line">
+              <p className="text-[11px] text-fg-muted max-w-xl leading-relaxed">
                 A single generated or uploaded file may include both practitioner and organization
                 providers. The API maps them with separate XSLTs (e.g. Practitioner vs Organization
                 resources), delivered as one multipart FHIR response.
@@ -773,13 +548,13 @@ export default function WorkspacePage() {
         {/* Custom XSD */}
         {selectorTab === 'custom' && (
           <div className="px-5 py-5">
-            <p className="text-xs text-gray-900 mb-5">
+            <p className="text-xs text-fg-muted mb-5">
               Upload any XSD schema to generate a synthetic sample XML. You can also upload a
               custom XSLT in the transform step.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-900 mb-1.5">
+                <label className="block text-xs font-semibold text-fg mb-1.5">
                   XSD Schema File
                 </label>
                 <input
@@ -789,16 +564,16 @@ export default function WorkspacePage() {
                   title="Select an XSD schema file"
                   aria-label="Select XSD schema file"
                   onChange={(e) => handleXsdFileChange(e.target.files?.[0] ?? null)}
-                  className="block w-full text-xs text-gray-900 file:mr-2 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-medium file:bg-gray-100 file:text-gray-900 hover:file:bg-gray-200 cursor-pointer border border-gray-200 rounded px-2 py-1"
+                  className="block w-full text-xs text-fg-muted file:mr-2 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-medium file:bg-surface-3 file:text-fg-body hover:file:bg-line-strong cursor-pointer border border-line rounded px-2 py-1"
                 />
                 {xsdFile && (
-                  <p className="text-xs text-gray-900 mt-1">
-                    Selected: <span className="font-medium text-gray-900">{xsdFile.name}</span>
+                  <p className="text-xs text-fg-muted mt-1">
+                    Selected: <span className="font-medium text-fg">{xsdFile.name}</span>
                   </p>
                 )}
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-900 mb-1.5">
+                <label className="block text-xs font-semibold text-fg mb-1.5">
                   Root Element Name
                 </label>
                 <input
@@ -806,9 +581,9 @@ export default function WorkspacePage() {
                   value={rootElement}
                   onChange={(e) => setRootElement(e.target.value)}
                   placeholder="e.g. roster"
-                  className="w-full text-sm border border-gray-200 rounded px-3 py-2 focus:outline-none focus:border-coco-red focus:ring-1 focus:ring-coco-red placeholder:text-gray-400"
+                  className="w-full text-sm border border-line rounded px-3 py-2 focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand placeholder:text-fg-subtle"
                 />
-                <p className="text-[11px] text-gray-900 mt-1">
+                <p className="text-[11px] text-fg-muted mt-1">
                   The root element defined in your XSD schema
                 </p>
               </div>
@@ -820,10 +595,10 @@ export default function WorkspacePage() {
       {/* ── Step 2: Generate ── */}
       <div className="card p-5">
         <div className="flex items-center gap-2 mb-4">
-          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-coco-red text-white text-xs font-bold flex-shrink-0">
+          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-brand text-white text-xs font-bold flex-shrink-0">
             2
           </div>
-          <h2 className="text-sm font-semibold text-gray-900">Generate Sample XML</h2>
+          <h2 className="text-sm font-semibold text-fg">Generate Sample XML</h2>
         </div>
 
         <div className="flex items-center gap-4">
@@ -845,14 +620,14 @@ export default function WorkspacePage() {
             )}
           </button>
           {!canGenerate && !generating && (
-            <span className="text-xs text-gray-900">
+            <span className="text-xs text-fg-muted">
               {selectorTab === 'predefined'
                 ? 'Select a schema above to continue'
                 : 'Upload an XSD file and enter a root element name'}
             </span>
           )}
           {hasGenerated && !generating && (
-            <span className="text-xs text-green-600 font-medium flex items-center gap-1">
+            <span className="text-xs text-ok font-medium flex items-center gap-1">
               <CheckCircle2 className="w-3.5 h-3.5" />
               {canonicalFilename}
             </span>
@@ -860,7 +635,7 @@ export default function WorkspacePage() {
         </div>
 
         {generateError && (
-          <div className="mt-3 flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">
+          <div className="mt-3 flex items-start gap-2 text-xs text-err bg-err-bg border border-err-border rounded-lg p-3">
             <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             {generateError}
           </div>
@@ -881,11 +656,11 @@ export default function WorkspacePage() {
       {showTransformStep && (
         <div className="card p-5">
           <div className="flex items-center gap-2 mb-4">
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-coco-red text-white text-xs font-bold flex-shrink-0">
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-brand text-white text-xs font-bold flex-shrink-0">
               3
             </div>
-            <h2 className="text-sm font-semibold text-gray-900">Validate against XSD</h2>
-            <span className="text-xs text-gray-900">(optional)</span>
+            <h2 className="text-sm font-semibold text-fg">Validate against XSD</h2>
+            <span className="text-xs text-fg-muted">(optional)</span>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
@@ -901,7 +676,7 @@ export default function WorkspacePage() {
             >
               {validating ? (
                 <>
-                  <span className="w-4 h-4 border-2 border-coco-red/30 border-t-coco-red rounded-full animate-spin" />
+                  <span className="w-4 h-4 border-2 border-brand/30 border-t-brand rounded-full animate-spin" />
                   Validating…
                 </>
               ) : (
@@ -911,13 +686,13 @@ export default function WorkspacePage() {
                 </>
               )}
             </button>
-            <span className="text-xs text-gray-900">
+            <span className="text-xs text-fg-muted">
               Checks schema conformance: structure, data types, and required elements.
             </span>
           </div>
 
           {validateError && (
-            <div className="mt-3 flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">
+            <div className="mt-3 flex items-start gap-2 text-xs text-err bg-err-bg border border-err-border rounded-lg p-3">
               <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               {validateError}
             </div>
@@ -934,11 +709,11 @@ export default function WorkspacePage() {
       {showTransformStep && (
         <div className="card p-5">
           <div className="flex items-center gap-2 mb-4">
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-coco-red text-white text-xs font-bold flex-shrink-0">
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-brand text-white text-xs font-bold flex-shrink-0">
               4
             </div>
-            <h2 className="text-sm font-semibold text-gray-900">Transform to FHIR</h2>
-            <span className="text-xs text-gray-900">(optional)</span>
+            <h2 className="text-sm font-semibold text-fg">Transform to FHIR</h2>
+            <span className="text-xs text-fg-muted">(optional)</span>
           </div>
 
           <div className="space-y-4">
@@ -975,17 +750,17 @@ export default function WorkspacePage() {
                     )}
                   </button>
                   {!activeTransform && !buildsLoading && (
-                    <span className="text-xs text-gray-900 bg-gray-100 border border-gray-200 rounded px-2.5 py-1 flex items-center gap-1.5">
-                      <AlertCircle className="w-3.5 h-3.5 text-gray-900" />
+                    <span className="text-xs text-fg-muted bg-surface-3 border border-line rounded px-2.5 py-1 flex items-center gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5 text-fg-body" />
                       No built-in transform. Upload a custom XSLT below.
                     </span>
                   )}
                   {buildsLoading && (
-                    <span className="text-xs text-gray-900">Loading transform configuration…</span>
+                    <span className="text-xs text-fg-muted">Loading transform configuration…</span>
                   )}
                 </div>
                 {hasGenerated && activeTransform && xsltCountForSelection > 0 && (
-                  <p className="text-[11px] text-gray-900 pl-0.5">
+                  <p className="text-[11px] text-fg-muted pl-0.5">
                     Includes {xsltCountForSelection} FHIR resource output
                     {xsltCountForSelection === 1 ? '' : 's'} in one combined response.
                   </p>
@@ -994,24 +769,24 @@ export default function WorkspacePage() {
             )}
 
             {/* Custom XSLT upload */}
-            <div className={selectorTab === 'predefined' ? 'border-t border-gray-100 pt-4' : ''}>
+            <div className={selectorTab === 'predefined' ? 'border-t border-line pt-4' : ''}>
               <button
                 onClick={() => setShowXsltUpload((v) => !v)}
-                className="flex items-center gap-2 text-sm font-medium text-gray-900 hover:text-gray-900 transition-colors"
+                className="flex items-center gap-2 text-sm font-medium text-fg hover:text-fg transition-colors"
               >
                 <Upload className="w-4 h-4" />
                 Upload custom XSLT
                 {showXsltUpload ? (
-                  <ChevronUp className="w-3.5 h-3.5 text-gray-900" />
+                  <ChevronUp className="w-3.5 h-3.5 text-fg-body" />
                 ) : (
-                  <ChevronDown className="w-3.5 h-3.5 text-gray-900" />
+                  <ChevronDown className="w-3.5 h-3.5 text-fg-body" />
                 )}
               </button>
 
               {showXsltUpload && (
                 <div className="mt-3 flex items-end gap-4 flex-wrap">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-900 mb-1.5">
+                    <label className="block text-xs font-semibold text-fg mb-1.5">
                       XSLT Stylesheet (.xsl / .xslt)
                     </label>
                     <input
@@ -1021,7 +796,7 @@ export default function WorkspacePage() {
                       title="Select an XSLT stylesheet"
                       aria-label="Select XSLT stylesheet"
                       onChange={(e) => setXsltFile(e.target.files?.[0] ?? null)}
-                      className="block text-xs text-gray-900 file:mr-2 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-medium file:bg-gray-100 file:text-gray-900 hover:file:bg-gray-200 cursor-pointer border border-gray-200 rounded px-2 py-1"
+                      className="block text-xs text-fg-muted file:mr-2 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-medium file:bg-surface-3 file:text-fg-body hover:file:bg-line-strong cursor-pointer border border-line rounded px-2 py-1"
                     />
                   </div>
                   <button
@@ -1031,7 +806,7 @@ export default function WorkspacePage() {
                   >
                     {transforming && !!xsltFile ? (
                       <>
-                        <span className="w-4 h-4 border-2 border-coco-red/30 border-t-coco-red rounded-full animate-spin" />
+                        <span className="w-4 h-4 border-2 border-brand/30 border-t-brand rounded-full animate-spin" />
                         Transforming…
                       </>
                     ) : (
@@ -1047,7 +822,7 @@ export default function WorkspacePage() {
           </div>
 
           {transformError && (
-            <div className="mt-3 flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">
+            <div className="mt-3 flex items-start gap-2 text-xs text-err bg-err-bg border border-err-border rounded-lg p-3">
               <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               {transformError}
             </div>
@@ -1085,22 +860,22 @@ export default function WorkspacePage() {
       {hasFhirOutput && fhirValidationSupported && (
         <div className="card p-5">
           <div className="flex items-center gap-2 mb-4">
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-coco-red text-white text-xs font-bold flex-shrink-0">
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-brand text-white text-xs font-bold flex-shrink-0">
               5
             </div>
-            <h2 className="text-sm font-semibold text-gray-900">Validate FHIR</h2>
+            <h2 className="text-sm font-semibold text-fg">Validate FHIR</h2>
 
             <span className="relative group flex items-center">
-              <HelpCircle className="w-4 h-4 text-gray-400 cursor-help" aria-hidden />
+              <HelpCircle className="w-4 h-4 text-fg-subtle cursor-help" aria-hidden />
               <span className="sr-only">What this check does</span>
               <span
                 role="tooltip"
-                className="pointer-events-none absolute left-6 top-0 z-20 hidden group-hover:block w-[26rem] rounded-lg border border-gray-200 bg-white p-3 text-xs font-normal leading-relaxed text-gray-900 shadow-lg"
+                className="pointer-events-none absolute left-6 top-0 z-20 hidden group-hover:block w-[26rem] rounded-lg border border-line bg-surface p-3 text-xs font-normal leading-relaxed text-fg-body shadow-lg"
               >
                 CoCo Flow does not validate FHIR itself. It POSTs each transformed resource to
                 HL7&apos;s FHIR validator API — one HTTP request per resource — and reports the
                 issues that come back. Only synthetic data is sent.
-                <span className="mt-2 block rounded-md bg-gray-50 p-2 font-mono text-[11px] leading-snug text-gray-700">
+                <span className="mt-2 block rounded-md bg-surface-2 p-2 font-mono text-[11px] leading-snug text-fg-body">
                   POST {fhirValidatorConfig?.endpoint ?? 'https://validator.fhir.org/validate'}
                   <br />
                   {'{'}
@@ -1141,22 +916,22 @@ export default function WorkspacePage() {
           </div>
 
           {fhirDocs.length > 0 && (
-            <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
-              <div className="text-xs font-semibold text-gray-900 mb-2">
+            <div className="mb-4 rounded-lg border border-line bg-surface-2 p-3">
+              <div className="text-xs font-semibold text-fg mb-2">
                 {displayName}: profiles used
               </div>
               <ul className="space-y-1">
                 {fhirDocs.map((p) => (
                   <li key={p.fileName} className="flex items-center gap-2 text-xs">
                     <span className="badge-fhir">{p.resourceType ?? 'FHIR'}</span>
-                    <span className="text-gray-900">
+                    <span className="text-fg-body">
                       {p.profile ? (
                         <>
                           US Core {US_CORE_VERSION}{' '}
                           <span className="font-mono">({profileLabel(p.profile).split('|')[0]})</span>
                         </>
                       ) : (
-                        <span className="text-gray-500">
+                        <span className="text-fg-subtle">
                           Base FHIR R4 — US Core defines no profile for this type
                         </span>
                       )}
@@ -1177,7 +952,7 @@ export default function WorkspacePage() {
                 }
                 onChange={(e) => setFhirProfileChoice(e.target.value === '' ? null : e.target.value)}
                 disabled={fhirValidating}
-                className="text-xs border border-gray-300 rounded-lg px-2.5 py-2 bg-white disabled:opacity-40"
+                className="text-xs border border-line-strong rounded-lg px-2.5 py-2 bg-surface disabled:opacity-40"
               >
                 {FHIR_PROFILE_OPTIONS.map((opt) => (
                   <option key={opt.label} value={opt.value ?? ''}>
@@ -1186,7 +961,7 @@ export default function WorkspacePage() {
                 ))}
               </select>
             ) : (
-              <span className="text-xs text-gray-900">
+              <span className="text-xs text-fg-muted">
                 Each resource is validated against its US Core {US_CORE_VERSION} profile.
               </span>
             )}
@@ -1211,8 +986,8 @@ export default function WorkspacePage() {
           </div>
 
           {fhirValidateError && (
-            <div className="mt-3 flex items-start gap-2 text-xs text-red-800 bg-red-50 border border-red-200 rounded-lg p-3">
-              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-red-600" />
+            <div className="mt-3 flex items-start gap-2 text-xs text-err bg-err-bg border border-err-border rounded-lg p-3">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 " />
               {fhirValidateError}
             </div>
           )}
@@ -1220,14 +995,14 @@ export default function WorkspacePage() {
           {Object.keys(fhirRows).length > 0 && (
             <div className="mt-4 space-y-4">
               {fhirDocs.length > 1 && (
-                <div className="text-xs text-gray-900">
+                <div className="text-xs text-fg-muted">
                   <span className="font-semibold">
                     {settledRows.filter((r) => r.result.valid).length}
                   </span>{' '}
                   of {fhirDocs.length} resources valid ·{' '}
                   {settledRows.reduce((n, r) => n + r.result.error_count, 0)} total issue
                   {settledRows.reduce((n, r) => n + r.result.error_count, 0) === 1 ? '' : 's'}
-                  {fhirValidating && <span className="text-gray-500"> · validating…</span>}
+                  {fhirValidating && <span className="text-fg-subtle"> · validating…</span>}
                 </div>
               )}
 
@@ -1252,10 +1027,10 @@ export default function WorkspacePage() {
       {(hasGenerated || hasFhirOutput) && (
         <div className="card p-5">
           <div className="flex items-center gap-2 mb-4">
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-coco-red text-white text-xs font-bold flex-shrink-0">
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-brand text-white text-xs font-bold flex-shrink-0">
               6
             </div>
-            <h2 className="text-sm font-semibold text-gray-900">Export</h2>
+            <h2 className="text-sm font-semibold text-fg">Export</h2>
           </div>
 
           <div className="flex flex-wrap gap-3">

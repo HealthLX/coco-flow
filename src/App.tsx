@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import AppSidebar from './components/AppSidebar'
 import HomePage from './pages/HomePage'
+import FlowPage from './pages/FlowPage'
 import WorkspacePage from './pages/WorkspacePage'
 import SchemasPage from './pages/SchemasPage'
 import DesignerPage from './pages/DesignerPage'
@@ -8,11 +9,12 @@ import HistoryPage from './pages/HistoryPage'
 
 function Layout() {
   return (
-    <div className="flex h-screen overflow-hidden bg-[#f2f2f2]">
+    <div className="flex h-screen overflow-hidden bg-bg">
       <AppSidebar />
       <main className="flex-1 overflow-y-auto">
         <Routes>
           <Route path="/" element={<HomePage />} />
+          <Route path="/flow" element={<FlowPage />} />
           <Route path="/workspace" element={<WorkspacePage />} />
           <Route path="/schemas" element={<SchemasPage />} />
           <Route path="/designer" element={<DesignerPage />} />

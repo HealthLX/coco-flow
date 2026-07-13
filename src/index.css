@@ -1,3 +1,5 @@
+@import './styles/tokens.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -14,11 +16,19 @@
 
   body {
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    background-color: #f2f2f2;
-    color: #1a202c;
+    background-color: rgb(var(--bg));
+    color: rgb(var(--fg-body));
     line-height: 1.6;
     margin: 0;
     padding: 0;
+    transition: background-color var(--dur) var(--ease), color var(--dur) var(--ease);
+  }
+
+  /* Keyboard focus stays visible everywhere; pointer clicks don't draw a ring. */
+  :focus-visible {
+    outline: 2px solid rgb(var(--accent));
+    outline-offset: 2px;
+    border-radius: 4px;
   }
 
   ::-webkit-scrollbar {
@@ -31,67 +41,109 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: #cbd5e0;
+    background: rgb(var(--border-strong));
     border-radius: 3px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: #a0aec0;
+    background: rgb(var(--fg-subtle));
   }
 }
 
 @layer components {
   .btn-primary {
-    @apply inline-flex items-center gap-2 px-4 py-2 bg-coco-red text-white text-sm font-semibold rounded-md hover:bg-coco-red-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center gap-2 px-4 py-2 bg-brand text-brand-fg text-sm font-semibold rounded-md hover:bg-brand-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center gap-2 px-4 py-2 bg-white text-coco-red text-sm font-semibold border border-coco-red rounded-md hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center gap-2 px-4 py-2 bg-surface text-brand text-sm font-semibold border border-brand rounded-md hover:bg-brand/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-ghost {
-    @apply inline-flex items-center gap-2 px-4 py-2 bg-transparent text-coco-red text-sm font-semibold rounded-md hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center gap-2 px-4 py-2 bg-transparent text-brand text-sm font-semibold rounded-md hover:bg-brand/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
+  /* On a cool-grey page, a white card needs a real (if quiet) shadow to sit above it. */
   .card {
-    @apply bg-white rounded-lg border border-gray-200 shadow-sm;
+    @apply bg-surface rounded-lg border border-line;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04), 0 1px 3px rgb(15 23 42 / 0.06);
+  }
+  .dark .card {
+    box-shadow: none;
   }
 
   .badge-canonical {
-    @apply inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200;
+    @apply inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-xs font-medium bg-canonical-bg text-canonical border border-canonical-border;
   }
 
   .badge-fhir {
-    @apply inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200;
+    @apply inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-xs font-medium bg-fhir-bg text-fhir border border-fhir-border;
   }
 
   .badge-xsd {
-    @apply inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200;
+    @apply inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-xs font-medium bg-xsd-bg text-xsd border border-xsd-border;
   }
 
   .badge-xslt {
-    @apply inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200;
+    @apply inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-xs font-medium bg-xslt-bg text-xslt border border-xslt-border;
   }
 
   .badge-active {
-    @apply inline-flex items-center whitespace-nowrap px-2.5 py-0.5 rounded-full text-xs font-semibold bg-coco-red text-white;
+    @apply inline-flex items-center whitespace-nowrap px-2.5 py-0.5 rounded-full text-xs font-semibold bg-brand text-brand-fg;
   }
 
   .status-success {
-    @apply text-green-400;
+    @apply text-ok;
   }
 
   .status-error {
-    @apply text-red-400;
+    @apply text-err;
   }
 
   .status-info {
-    @apply text-gray-900;
+    @apply text-fg-muted;
   }
 
   .status-pending {
-    @apply text-amber-400;
+    @apply text-warn;
   }
+}
+
+/* ───────── Canonical ↔ FHIR link highlights ───────── */
+
+/* Confidence is encoded in the underline, not just the fill: a solid rule means the value
+   survived the transform verbatim, a dashed one means it was derived. */
+.cm-link-exact {
+  background-color: rgb(var(--accent) / 0.16);
+  border-bottom: 2px solid rgb(var(--accent));
+  border-radius: 2px;
+}
+.cm-link-derived {
+  background-color: rgb(var(--accent) / 0.1);
+  border-bottom: 2px dashed rgb(var(--accent) / 0.8);
+  border-radius: 2px;
+}
+.cm-link-date {
+  background-color: rgb(var(--canonical) / 0.14);
+  border-bottom: 2px solid rgb(var(--canonical) / 0.8);
+  border-radius: 2px;
+}
+.cm-link-ambiguous {
+  background-color: rgb(var(--fg-subtle) / 0.16);
+  border-bottom: 2px dotted rgb(var(--fg-subtle));
+  border-radius: 2px;
+}
+/* Fields the transform never carried across. Amber, because this is a finding, not an error. */
+.cm-link-unmapped {
+  background-color: rgb(var(--warn) / 0.14);
+  border-bottom: 1px dotted rgb(var(--warn));
+  border-radius: 2px;
+}
+/* The element under the cursor, and whatever it links to on the other side. */
+.cm-link-active {
+  background-color: rgb(var(--accent) / 0.35);
+  outline: 1px solid rgb(var(--accent));
+  border-radius: 2px;
 }
 
 /* ───────── XSD Design diagram (Oxygen-style graph) ───────── */
@@ -101,7 +153,7 @@
   position: relative;
   overflow: hidden;
   cursor: grab;
-  background-color: #fbfcfe;
+  background-color: rgb(var(--xsd-canvas));
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
@@ -118,7 +170,6 @@
 }
 
 .xsd-diagram {
-  --xsd-line: #b6c2d4;
   --xsd-seg: 48px;
   padding: 24px 32px;
   width: max-content;
@@ -153,10 +204,10 @@
   display: inline-flex;
   flex-direction: column;
   min-width: 116px;
-  border: 1.5px solid #b9c2cf;
+  border: 1.5px solid rgb(var(--xsd-box-border));
   border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 1px 2px rgba(15, 27, 42, 0.06);
+  background: rgb(var(--xsd-box-bg));
+  box-shadow: 0 1px 2px rgb(var(--navy) / 0.06);
   cursor: default;
   transition: box-shadow 0.14s ease, border-color 0.14s ease, transform 0.14s ease;
 }
@@ -167,14 +218,14 @@
   cursor: pointer;
 }
 .xsd-dbox:hover {
-  border-color: #94a3b8;
-  box-shadow: 0 4px 14px rgba(15, 27, 42, 0.14);
+  border-color: rgb(var(--fg-subtle));
+  box-shadow: 0 4px 14px rgb(var(--navy) / 0.14);
 }
 .xsd-dbox.is-expandable:hover {
-  border-color: var(--coco-red, #c0392b);
+  border-color: rgb(var(--brand));
 }
 .xsd-dbox.is-root .xsd-dname {
-  background: linear-gradient(#1a2e42, #0d1b2a);
+  background: linear-gradient(rgb(var(--navy-2)), rgb(var(--navy)));
   color: #fff;
   border-radius: 6px;
 }
@@ -184,8 +235,8 @@
   font-size: 13px;
   font-weight: 600;
   font-family: 'Fira Code', 'Cascadia Code', monospace;
-  color: #1e3a5f;
-  background: linear-gradient(#eaf2ff, #d3e3ff);
+  color: rgb(var(--xsd-name-fg));
+  background: linear-gradient(rgb(var(--xsd-name-from)), rgb(var(--xsd-name-to)));
   border-radius: 6px 6px 0 0;
   white-space: nowrap;
 }
@@ -199,10 +250,10 @@
   gap: 6px;
   padding: 4px 12px;
   font-size: 11.5px;
-  border-top: 1px solid #e5e9f0;
+  border-top: 1px solid rgb(var(--border));
 }
 .xsd-dtype-label {
-  color: #94a3b8;
+  color: rgb(var(--fg-subtle));
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -210,7 +261,7 @@
 }
 .xsd-dtype-value {
   font-family: 'Fira Code', 'Cascadia Code', monospace;
-  color: #475569;
+  color: rgb(var(--fg-muted));
 }
 
 /* +/- expand control hanging off the box's right edge */
@@ -225,24 +276,24 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  border: 1.5px solid #b9c2cf;
-  background: #fff;
-  color: #64748b;
+  border: 1.5px solid rgb(var(--xsd-box-border));
+  background: rgb(var(--xsd-box-bg));
+  color: rgb(var(--fg-muted));
   font-size: 13px;
   line-height: 1;
   cursor: pointer;
   z-index: 2;
 }
 .xsd-dtoggle:hover {
-  border-color: var(--coco-red, #c0392b);
-  color: #c0392b;
+  border-color: rgb(var(--brand));
+  color: rgb(var(--brand));
 }
 
 .xsd-denum {
   margin-top: 2px;
   padding: 2px 10px 4px;
   font-size: 9.5px;
-  color: #059669;
+  color: rgb(var(--ok));
   font-family: 'Fira Code', monospace;
 }
 
@@ -256,11 +307,11 @@
   padding: 6px 9px;
   font-size: 10.5px;
   line-height: 1.4;
-  color: #6b6450;
-  background: #fffdf3;
-  border: 1px solid #ece4c7;
+  color: rgb(var(--xsd-doc-fg));
+  background: rgb(var(--xsd-doc-bg));
+  border: 1px solid rgb(var(--xsd-doc-border));
   border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(15, 27, 42, 0.12);
+  box-shadow: 0 4px 12px rgb(var(--navy) / 0.12);
   pointer-events: none;
   z-index: 40;
   opacity: 0;
@@ -293,7 +344,7 @@
   height: 5px;
   margin-left: 7px;
   border-radius: 50%;
-  background: #e0a23b;
+  background: rgb(var(--xslt));
   vertical-align: middle;
 }
 
@@ -311,7 +362,7 @@
   left: 0;
   top: 50%;
   width: var(--xsd-seg);
-  border-top: 2px solid var(--xsd-line);
+  border-top: 2px solid rgb(var(--xsd-line));
 }
 .xsd-dcomp::after {
   content: '';
@@ -319,7 +370,7 @@
   right: 0;
   top: 50%;
   width: var(--xsd-seg);
-  border-top: 2px solid var(--xsd-line);
+  border-top: 2px solid rgb(var(--xsd-line));
 }
 /* Lead compositor (a choice sitting as a child) — parent stub already draws
    its left connector, so suppress the left segment. */
@@ -345,7 +396,7 @@
   color: #6b551b;
   cursor: pointer;
   z-index: 1;
-  box-shadow: 0 1px 2px rgba(15, 27, 42, 0.08);
+  box-shadow: 0 1px 2px rgb(var(--navy) / 0.08);
   transition: box-shadow 0.14s ease, border-color 0.14s ease, transform 0.14s ease;
 }
 .xsd-dcomp-icon:hover {
@@ -361,6 +412,11 @@
 .xsd-dcomp-icon.is-choice:hover {
   border-color: #c2691f;
   box-shadow: 0 3px 8px rgba(194, 105, 31, 0.25);
+}
+/* The compositor icons keep their warm fill in dark mode (they read as physical
+   connectors, not surfaces) but need their glare taken down. */
+.dark .xsd-dcomp-icon {
+  filter: brightness(0.82) saturate(0.9);
 }
 
 /* Vertical bus + horizontal stubs to each child */
@@ -381,7 +437,7 @@
   left: 0;
   top: 50%;
   width: var(--xsd-seg);
-  border-top: 2px solid var(--xsd-line);
+  border-top: 2px solid rgb(var(--xsd-line));
 }
 .xsd-dchildwrap::after {
   content: '';
@@ -389,7 +445,7 @@
   left: 0;
   top: 0;
   bottom: 0;
-  border-left: 2px solid var(--xsd-line);
+  border-left: 2px solid rgb(var(--xsd-line));
 }
 .xsd-dchildwrap:first-child::after {
   top: 50%;
@@ -409,8 +465,8 @@
   transform: translateY(-150%);
   font-size: 9.5px;
   font-family: 'Fira Code', monospace;
-  color: #94a3b8;
-  background: #fff;
+  color: rgb(var(--fg-subtle));
+  background: rgb(var(--xsd-canvas));
   padding: 0 2px;
   z-index: 1;
 }

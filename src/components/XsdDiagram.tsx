@@ -219,13 +219,13 @@ export default function XsdDiagram({ xsd, coreXsd, title }: XsdDiagramProps) {
 
   return (
     <div className="card overflow-hidden flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-gray-50 flex-none">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-line bg-surface-2 flex-none">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-gray-900">{title}</span>
+          <span className="text-sm font-semibold text-fg">{title}</span>
           <span className="badge-xsd">Diagram</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="text-[11px] text-gray-900 mr-1 tabular-nums">
+          <span className="text-[11px] text-fg-muted mr-1 tabular-nums">
             {Math.round(view.scale * 100)}%
           </span>
           <ToolbarButton onClick={() => zoomBy(1 / 1.2)} label="Zoom out">
@@ -244,15 +244,15 @@ export default function XsdDiagram({ xsd, coreXsd, title }: XsdDiagramProps) {
       </div>
 
       {parsed.error ? (
-        <div className="flex items-start gap-2 text-xs text-amber-900 bg-amber-50 m-3 border border-amber-200 rounded-lg p-3">
+        <div className="flex items-start gap-2 text-xs text-warn bg-warn-bg m-3 border border-warn-border rounded-lg p-3">
           <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
           {parsed.error}
         </div>
       ) : parsed.roots.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
-          <AlertCircle className="w-8 h-8 text-gray-400 mb-3" />
-          <p className="text-sm text-gray-900 font-medium">No root element to diagram</p>
-          <p className="text-xs text-gray-900 mt-1 max-w-xs">
+          <AlertCircle className="w-8 h-8 text-fg-subtle mb-3" />
+          <p className="text-sm text-fg-body font-medium">No root element to diagram</p>
+          <p className="text-xs text-fg-muted mt-1 max-w-xs">
             This schema defines shared types only (no top-level element), so there's nothing to
             chart. Open it in the Schemas tab to view its source.
           </p>
@@ -309,7 +309,7 @@ function ToolbarButton({
       onClick={onClick}
       title={label}
       aria-label={label}
-      className="flex items-center justify-center w-7 h-7 rounded text-gray-900 hover:text-gray-900 hover:bg-gray-200/70 transition-colors"
+      className="flex items-center justify-center w-7 h-7 rounded text-fg-body hover:text-fg hover:bg-surface-3 transition-colors"
     >
       {children}
     </button>

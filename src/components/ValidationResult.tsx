@@ -8,8 +8,8 @@ interface ValidationResultProps {
 export default function ValidationResult({ result }: ValidationResultProps) {
   if (result.valid) {
     return (
-      <div className="flex items-start gap-2 text-xs text-green-800 bg-green-50 border border-green-200 rounded-lg p-3">
-        <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5 text-green-600" />
+      <div className="flex items-start gap-2 rounded-lg border border-ok-border bg-ok-bg p-3 text-xs text-ok">
+        <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
         <div>
           <span className="font-semibold">Valid</span> against{' '}
           <span className="font-mono">{result.schema}</span>. No schema violations found.
@@ -19,9 +19,9 @@ export default function ValidationResult({ result }: ValidationResultProps) {
   }
 
   return (
-    <div className="text-xs text-red-800 bg-red-50 border border-red-200 rounded-lg p-3">
+    <div className="rounded-lg border border-err-border bg-err-bg p-3 text-xs text-err">
       <div className="flex items-start gap-2">
-        <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-red-600" />
+        <XCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
         <div>
           <span className="font-semibold">Invalid</span> against{' '}
           <span className="font-mono">{result.schema}</span>: {result.error_count} issue
@@ -30,10 +30,10 @@ export default function ValidationResult({ result }: ValidationResultProps) {
       </div>
       <ul className="mt-2.5 space-y-1.5 pl-6">
         {result.errors.map((issue, i) => (
-          <li key={i} className="border-l-2 border-red-200 pl-2.5">
-            <div className="text-red-900">{issue.message}</div>
+          <li key={i} className="border-l-2 border-err-border pl-2.5">
+            <div>{issue.message}</div>
             {(issue.path || issue.line != null) && (
-              <div className="text-[11px] text-red-500 mt-0.5 font-mono">
+              <div className="mt-0.5 font-mono text-[11px] text-err/70">
                 {issue.path ? issue.path : ''}
                 {issue.path && issue.line != null ? ' · ' : ''}
                 {issue.line != null ? `line ${issue.line}` : ''}
@@ -43,7 +43,7 @@ export default function ValidationResult({ result }: ValidationResultProps) {
         ))}
       </ul>
       {result.error_count > result.errors.length && (
-        <div className="mt-2 pl-6 text-[11px] text-red-500 italic">
+        <div className="mt-2 pl-6 text-[11px] italic text-err/70">
           … {result.error_count - result.errors.length} more issue(s) not shown.
         </div>
       )}

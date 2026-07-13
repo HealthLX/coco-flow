@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Patient xmlns="http://hl7.org/fhir" xmlns:xhtml="http://www.w3.org/1999/xhtml" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <id value="-summer"/>
+  <meta>
+    <lastUpdated value="2026-07-09T20:26:37.180101-05:00"/>
+  </meta>
+  <text>
+    <status value="generated"/>
+    <xhtml:div xmlns="http://www.w3.org/1999/xhtml">Patient: American Indian or Alaska Native, DOB: 1985-11-21</xhtml:div>
+  </text>
+  <extension url="http://hl7.org/fhir/us/core/StructureDefinition/us-core-race">
+    <extension url="ombCategory">
+      <valueCoding>
+        <system value="urn:oid:2.16.840.1.113883.6.238"/>
+        <code value="2106-3"/>
+        <display value="White"/>
+      </valueCoding>
+    </extension>
+    <extension url="text">
+      <valueString value="White"/>
+    </extension>
+  </extension>
+  <extension url="http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity">
+    <extension url="ombCategory">
+      <valueCoding>
+        <system value="urn:oid:2.16.840.1.113883.6.238"/>
+        <code value="2135-2"/>
+        <display value="Hispanic or Latino"/>
+      </valueCoding>
+    </extension>
+    <extension url="text">
+      <valueString value="Hispanic or Latino"/>
+    </extension>
+  </extension>
+  <identifier>
+    <system value="http://terminology.cocodata.org/identifiers/member-id"/>
+    <value value="summer"/>
+  </identifier>
+  <active value="true"/>
+  <name>
+    <use value="temp"/>
+    <text value="American Indian or Alaska Native"/>
+    <family value="Raymond"/>
+    <given value="Raymond"/>
+    <prefix value="Dr."/>
+    <suffix value="MD"/>
+    <period>
+      <start value="2019-05-23T11:07:48Z"/>
+      <end value="2023-07-22T07:04:25Z"/>
+    </period>
+  </name>
+  <telecom>
+    <system value="fax"/>
+    <value value="growth"/>
+    <use value="mobile"/>
+    <rank value="1"/>
+    <period>
+      <start value="2020-08-25T19:09:17Z"/>
+      <end value="2026-02-28T08:13:37Z"/>
+    </period>
+  </telecom>
+  <gender value="unknown"/>
+  <birthDate value="1985-11-21"/>
+  <deceasedDateTime value="2017-09-17T00:48:18Z"/>
+  <address>
+    <type value="both"/>
+    <line value="939 Lopez Road Suite 769"/>
+    <city value="Colemouth"/>
+    <district value="issue"/>
+    <state value="IN"/>
+    <postalCode value="33845"/>
+    <country value="AU"/>
+    <period>
+      <start value="2020-07-01T09:23:23Z"/>
+      <end value="2024-11-12T02:13:42Z"/>
+    </period>
+  </address>
+  <communication>
+    <language>
+      <coding>
+        <system value="urn:ietf:bcp:47"/>
+        <code value="rw"/>
+        <display value="Kinyarwanda"/>
+      </coding>
+    </language>
+    <preferred value="true"/>
+  </communication>
+</Patient>
