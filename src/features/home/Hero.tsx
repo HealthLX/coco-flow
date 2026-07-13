@@ -11,9 +11,9 @@ const GLYPH_STAGES = [
 ]
 
 /**
- * The product, in one glance: data moving through the pipeline. It runs on a loop rather
- * than on scroll or hover, because the point is that this is a thing that *flows* — the
- * page shouldn't have to be poked before it says so.
+ * The product, in one glance: the stages data passes through. The connectors are static —
+ * the glyph is a diagram, not an attention-grabber, and the page shouldn't be moving while
+ * someone is trying to read the title next to it.
  */
 function PipelineGlyph() {
   return (
@@ -33,13 +33,9 @@ function PipelineGlyph() {
                   y2="0"
                   strokeWidth="1.5"
                   strokeDasharray="4 4"
-                  className="animate-flow-dash stroke-accent/70"
+                  className="stroke-white/25"
                 />
               </svg>
-              <span
-                className="absolute -top-[3px] h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-accent shadow-[0_0_10px_rgb(var(--accent))] animate-flow-packet"
-                style={{ animationDelay: `${i * 0.18}s` }}
-              />
             </div>
           )}
           <div className="flex flex-col items-center gap-1.5">

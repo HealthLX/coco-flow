@@ -20,11 +20,11 @@ import cocoLogo from '../assets/coco.png'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Overview', icon: LayoutDashboard, end: true, beta: false },
-  { to: '/flow', label: 'Pipeline', icon: Workflow, end: false, beta: true },
   { to: '/workspace', label: 'Workspace', icon: Zap, end: false, beta: false },
   { to: '/schemas', label: 'Schemas', icon: FileCode2, end: false, beta: false },
   { to: '/designer', label: 'Schema Explorer', icon: Network, end: false, beta: false },
   { to: '/history', label: 'History', icon: History, end: false, beta: false },
+  { to: '/flow', label: 'Pipeline', icon: Workflow, end: false, beta: true },
 ]
 
 export default function AppSidebar() {
