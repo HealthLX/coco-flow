@@ -85,6 +85,25 @@ describe('FlowPage', () => {
     expect(screen.getAllByText(/us-core-patient/).length).toBeGreaterThan(0)
   }, 30_000)
 
+  it('jumps to the FHIR panel automatically once a transform produces resources', async () => {
+    const user = userEvent.setup()
+    renderFlow()
+
+    await user.click(screen.getByRole('button', { name: 'Roster' }))
+
+    await user.click(railNode('Sample XML'))
+    await user.click(await screen.findByRole('button', { name: /^generate sample$/i }))
+    await waitFor(() => expect(railNode('Transform')).toBeEnabled(), { timeout: 10_000 })
+
+    await user.click(railNode('Transform'))
+    await user.click(await screen.findByRole('button', { name: /transform to fhir/i }))
+
+    // No explicit click on the FHIR rail node — the panel should follow the run there on its own.
+    await waitFor(() => expect(railNode('FHIR')).toHaveAttribute('aria-current', 'step'), {
+      timeout: 10_000,
+    })
+  }, 20_000)
+
   it('unblocks the downstream stages once a sample exists', async () => {
     const user = userEvent.setup()
     renderFlow()

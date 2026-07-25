@@ -52,6 +52,13 @@ export default function FlowPage() {
     setSelected(id)
   }
 
+  // Firing the transform is a direct, explicit action (not passive run-following), so it jumps
+  // to the FHIR panel regardless of `userPicked` — the whole point is to show what it produced.
+  const transformAndShowFhir = async () => {
+    const result = await actions.transform()
+    if (result) setSelected('fhir')
+  }
+
   useEffect(() => {
     if (!busy) userPicked.current = false
   }, [busy])
@@ -86,6 +93,7 @@ export default function FlowPage() {
           busy={busy}
           fhirView={fhirView}
           onFhirViewChange={setFhirView}
+          onTransform={transformAndShowFhir}
         />
       </div>
     </div>
