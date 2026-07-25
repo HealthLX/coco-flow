@@ -55,12 +55,15 @@ export default function StagePanel({
   busy,
   fhirView,
   onFhirViewChange,
+  onTransform,
 }: {
   stage: StageId
   run: PipelineRun
   busy: boolean
   fhirView: FhirView
   onFhirViewChange: (view: FhirView) => void
+  /** Runs the transform and, on success, switches the open panel to FHIR to show what it produced. */
+  onTransform: () => void
 }) {
   const { state, fhirDocs, schemaFile, hasTransforms, fhirValidationSupported, actions } = run
   const { artifacts, stages, selection, validatorConfig } = state
@@ -186,7 +189,7 @@ export default function StagePanel({
           actions={
             <Button
               size="sm"
-              onClick={actions.transform}
+              onClick={onTransform}
               loading={status.state === 'running'}
               disabled={busy || !artifacts.canonicalXml || !hasTransforms}
               title={hasTransforms ? undefined : 'This canonical has no XSLT configured'}
