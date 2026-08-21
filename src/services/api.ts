@@ -471,6 +471,25 @@ export async function transformUpload(
   return res.text()
 }
 
+// ── Convert ──────────────────────────────────────────────────────────────────
+
+/**
+ * POST /convert/xml-to-json — generic structural XML→JSON conversion of the given XML text.
+ * Not spec-canonical FHIR JSON; see src/lib/xmlToJson.ts for the same rules run client-side.
+ */
+export async function convertXmlToJson(xml: string): Promise<string> {
+  const res = await fetch(`${BASE}/convert/xml-to-json`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/xml' },
+    body: xml,
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(`JSON conversion failed ${res.status}: ${text}`)
+  }
+  return res.text()
+}
+
 // ── Validation (XSD) ─────────────────────────────────────────────────────────
 
 export interface ValidationIssue {

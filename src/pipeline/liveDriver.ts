@@ -1,4 +1,5 @@
 import {
+  convertXmlToJson,
   fetchTransformContent,
   generateCustomXsdContent,
   generateSampleContent,
@@ -106,6 +107,8 @@ export function createLiveDriver(): PipelineDriver {
       if (!file) throw new Error('Validator returned no result for this resource.')
       return file
     },
+
+    xmlToJson: (xml) => convertXmlToJson(xml),
   } satisfies PipelineDriver
 }
 

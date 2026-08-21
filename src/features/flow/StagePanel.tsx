@@ -1,4 +1,5 @@
-import { AlertTriangle, ArrowRight, Download, FileCode2, Info } from 'lucide-react'
+import { useState } from 'react'
+import { AlertTriangle, ArrowRight, Download, FileJson, FileCode2, Info } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import Badge from '../../components/ui/Badge'
 import Button from '../../components/ui/Button'
@@ -69,6 +70,11 @@ export default function StagePanel({
   const { artifacts, stages, selection, validatorConfig } = state
   const status = stages[stage]
   const def = canonicalDef(selection.canonical)
+
+  // Export-stage JSON downloads aren't tracked by the pipeline's stage/run state machine (they're
+  // synchronous-feeling one-off conversions, not a pipeline stage), so they get their own local state.
+  const [jsonBusy, setJsonBusy] = useState<'canonical' | 'fhir' | 'all' | null>(null)
+  const [jsonError, setJsonError] = useState<string | null>(null)
 
   switch (stage) {
     case 'schema': {
@@ -321,13 +327,28 @@ export default function StagePanel({
         </PanelFrame>
       )
 
-    case 'export':
+    case 'export': {
+      const runJson = async (kind: 'canonical' | 'fhir' | 'all') => {
+        setJsonBusy(kind)
+        setJsonError(null)
+        try {
+          if (kind === 'canonical') await actions.downloadCanonicalJson()
+          else if (kind === 'fhir') await actions.downloadFhirJson()
+          else await actions.exportAllJson()
+        } catch (err) {
+          setJsonError(err instanceof Error ? err.message : String(err))
+        } finally {
+          setJsonBusy(null)
+        }
+      }
+
       return (
         <PanelFrame stage={stage}>
           {!artifacts.canonicalXml ? (
             <EmptyState title="Nothing to export" description="Generate a sample first." />
           ) : (
             <div className="space-y-3">
+              {jsonError && <StageError message={jsonError} />}
               <div className="flex flex-wrap gap-2">
                 <Button
                   variant="secondary"
@@ -343,11 +364,28 @@ export default function StagePanel({
                 </Button>
                 <Button
                   variant="secondary"
+                  icon={<FileJson className="h-4 w-4" />}
+                  loading={jsonBusy === 'canonical'}
+                  onClick={() => runJson('canonical')}
+                >
+                  Canonical JSON
+                </Button>
+                <Button
+                  variant="secondary"
                   icon={<Download className="h-4 w-4" />}
                   onClick={() => fhirDocs.forEach((d) => downloadXmlFromMemory(d.xml, d.fileName))}
                   disabled={fhirDocs.length === 0}
                 >
                   FHIR ({fhirDocs.length})
+                </Button>
+                <Button
+                  variant="secondary"
+                  icon={<FileJson className="h-4 w-4" />}
+                  loading={jsonBusy === 'fhir'}
+                  disabled={fhirDocs.length === 0}
+                  onClick={() => runJson('fhir')}
+                >
+                  FHIR JSON ({fhirDocs.length})
                 </Button>
                 <Button
                   icon={<Download className="h-4 w-4" />}
@@ -356,13 +394,28 @@ export default function StagePanel({
                 >
                   Everything
                 </Button>
+                <Button
+                  icon={<FileJson className="h-4 w-4" />}
+                  loading={jsonBusy === 'all'}
+                  disabled={fhirDocs.length === 0}
+                  onClick={() => runJson('all')}
+                >
+                  Everything (JSON)
+                </Button>
               </div>
               <p className="text-xs text-fg-muted">
                 Downloads what's on screen, including any edits you made to the sample.
+              </p>
+              <p className="flex items-start gap-1.5 text-xs text-fg-subtle">
+                <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+                JSON exports are a generic structural conversion (elements → keys, repeated elements
+                → arrays), not spec-canonical FHIR JSON. Conformant FHIR JSON comes from the HealthLX
+                mappings.
               </p>
             </div>
           )}
         </PanelFrame>
       )
+    }
   }
 }
