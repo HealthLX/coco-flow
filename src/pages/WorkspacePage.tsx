@@ -5,6 +5,7 @@ import {
   Shuffle,
   Upload,
   Download,
+  FileJson,
   AlertCircle,
   ChevronDown,
   ChevronUp,
@@ -23,6 +24,7 @@ import {
   validateCustomXml,
   validateFhirXml,
   getFhirValidatorConfig,
+  convertXmlToJson,
   FHIR_PROFILE_OPTIONS,
   usCoreProfileFor,
   pinUsCoreVersion,
@@ -41,8 +43,10 @@ import {
   FHIR_VALIDATE_CONCURRENCY,
   canonicalSampleFilename,
   deriveFhirDocs,
+  downloadJsonFromMemory,
   downloadXmlFromMemory,
   fhirExportBasename,
+  jsonFilename,
   profileLabel,
   runPool,
   schemaHasBuiltinTransforms,
@@ -395,6 +399,37 @@ export default function WorkspacePage() {
   const exportBoth = () => {
     exportCanonical()
     setTimeout(exportFhir, 300)
+  }
+
+  const [jsonBusy, setJsonBusy] = useState<'canonical' | 'fhir' | 'both' | null>(null)
+  const [jsonExportError, setJsonExportError] = useState<string | null>(null)
+
+  const exportCanonicalJson = async () => {
+    if (!canonicalXml) return
+    const json = await convertXmlToJson(canonicalXml)
+    downloadJsonFromMemory(json, jsonFilename(canonicalFilename ?? 'sample.xml'))
+  }
+  const exportFhirJson = async () => {
+    for (const doc of fhirDocs) {
+      const json = await convertXmlToJson(doc.xml)
+      downloadJsonFromMemory(json, jsonFilename(doc.fileName))
+    }
+  }
+  const runJsonExport = async (kind: 'canonical' | 'fhir' | 'both') => {
+    setJsonBusy(kind)
+    setJsonExportError(null)
+    try {
+      if (kind === 'canonical') await exportCanonicalJson()
+      else if (kind === 'fhir') await exportFhirJson()
+      else {
+        await exportCanonicalJson()
+        await exportFhirJson()
+      }
+    } catch (e) {
+      setJsonExportError((e as Error).message)
+    } finally {
+      setJsonBusy(null)
+    }
   }
 
   const hasFhirOutput = !!fhirResult
@@ -1044,6 +1079,15 @@ export default function WorkspacePage() {
               Export Canonical XML
             </button>
             <button
+              onClick={() => runJsonExport('canonical')}
+              disabled={!canonicalXml || jsonBusy !== null}
+              className="btn-secondary disabled:opacity-40"
+              title={!canonicalXml ? 'Generate or select a sample with canonical preview first' : undefined}
+            >
+              {jsonBusy === 'canonical' ? <Spinner size="sm" tone="red" /> : <FileJson className="w-4 h-4" />}
+              Export Canonical JSON
+            </button>
+            <button
               onClick={exportFhir}
               disabled={!hasFhirOutput}
               className="btn-secondary disabled:opacity-40"
@@ -1052,13 +1096,44 @@ export default function WorkspacePage() {
               <Download className="w-4 h-4" />
               {fhirResult?.kind === 'multipart' ? 'Export FHIR XML files' : 'Export FHIR XML'}
             </button>
+            <button
+              onClick={() => runJsonExport('fhir')}
+              disabled={!hasFhirOutput || jsonBusy !== null}
+              className="btn-secondary disabled:opacity-40"
+              title={!hasFhirOutput ? 'Transform first to export FHIR output' : undefined}
+            >
+              {jsonBusy === 'fhir' ? <Spinner size="sm" tone="red" /> : <FileJson className="w-4 h-4" />}
+              {fhirResult?.kind === 'multipart' ? 'Export FHIR JSON files' : 'Export FHIR JSON'}
+            </button>
             {hasFhirOutput && canonicalXml && (
-              <button onClick={exportBoth} className="btn-primary">
-                <PackageOpen className="w-4 h-4" />
-                Export Both
-              </button>
+              <>
+                <button onClick={exportBoth} className="btn-primary">
+                  <PackageOpen className="w-4 h-4" />
+                  Export Both
+                </button>
+                <button
+                  onClick={() => runJsonExport('both')}
+                  disabled={jsonBusy !== null}
+                  className="btn-primary disabled:opacity-40"
+                >
+                  {jsonBusy === 'both' ? <Spinner size="sm" /> : <PackageOpen className="w-4 h-4" />}
+                  Export Both (JSON)
+                </button>
+              </>
             )}
           </div>
+          <p className="mt-3 text-xs text-fg-subtle">
+            JSON exports are a generic structural conversion (elements → keys, repeated elements →
+            arrays), not spec-canonical FHIR JSON. Conformant FHIR JSON comes from the HealthLX
+            mappings.
+          </p>
+
+          {jsonExportError && (
+            <div className="mt-3 flex items-start gap-2 text-xs text-err bg-err-bg border border-err-border rounded-lg p-3">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              {jsonExportError}
+            </div>
+          )}
         </div>
       )}
     </div>
