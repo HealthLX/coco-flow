@@ -10,6 +10,7 @@ import type {
   ValidationResult,
 } from '../../services/api'
 import type { PipelineDriver } from '../driver'
+import { xmlToJson } from '../../lib/xmlToJson'
 
 import rosterSample from './data/roster-sample.xml?raw'
 import rosterPatientFhir from './data/roster-patient-fhir.xml?raw'
@@ -324,6 +325,13 @@ export function createFixtureDriver(): PipelineDriver {
       // Spread the timings so the rows visibly resolve one at a time.
       await sleep(1200 + Math.random() * 3300)
       return fakeValidation(doc)
+    },
+
+    // No backend in fixture/proto mode, so this reuses the same browser-side converter the
+    // live app uses for JSON exports match structurally.
+    async xmlToJson(xml) {
+      await sleep(150)
+      return xmlToJson(xml)
     },
   }
 }

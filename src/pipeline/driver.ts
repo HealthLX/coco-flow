@@ -44,6 +44,9 @@ export interface PipelineDriver {
 
   fhirValidatorConfig(): Promise<FhirValidatorConfig>
   validateFhirResource(doc: FhirFileToValidate): Promise<FhirFileValidation>
+
+  /** Structural XML→JSON conversion of XML already in memory. Not spec-canonical FHIR JSON. */
+  xmlToJson(xml: string): Promise<string>
 }
 
 export const DriverContext = createContext<PipelineDriver | null>(null)

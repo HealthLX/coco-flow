@@ -11,7 +11,9 @@ import {
   FHIR_VALIDATE_CONCURRENCY,
   canonicalDef,
   deriveFhirDocs,
+  downloadJsonFromMemory,
   downloadXmlFromMemory,
+  jsonFilename,
   runPool,
   schemaHasBuiltinTransforms,
   type FhirDoc,
@@ -332,6 +334,24 @@ export function usePipelineRun() {
     }
   }, [artifacts.canonicalXml, artifacts.canonicalFilename, fhirDocs])
 
+  const downloadCanonicalJson = useCallback(async () => {
+    if (!artifacts.canonicalXml) return
+    const json = await driver.xmlToJson(artifacts.canonicalXml)
+    downloadJsonFromMemory(json, jsonFilename(artifacts.canonicalFilename ?? 'sample.xml'))
+  }, [driver, artifacts.canonicalXml, artifacts.canonicalFilename])
+
+  const downloadFhirJson = useCallback(async () => {
+    for (const doc of fhirDocs) {
+      const json = await driver.xmlToJson(doc.xml)
+      downloadJsonFromMemory(json, jsonFilename(doc.fileName))
+    }
+  }, [driver, fhirDocs])
+
+  const exportAllJson = useCallback(async () => {
+    await downloadCanonicalJson()
+    await downloadFhirJson()
+  }, [downloadCanonicalJson, downloadFhirJson])
+
   /**
    * Walk the whole pipeline, stopping at the first failure. Powers the one-click demo.
    * A failed XSD check still transforms — the whole point of the run is to see where it breaks.
@@ -388,6 +408,9 @@ export function usePipelineRun() {
       validateFhirDocs,
       editCanonical,
       exportAll,
+      downloadCanonicalJson,
+      downloadFhirJson,
+      exportAllJson,
       reset,
       runAll,
     },

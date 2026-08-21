@@ -143,8 +143,8 @@ export function deriveFhirDocs(
     .map((d) => ({ ...d, profile: profileForResource(d.resourceType) }))
 }
 
-export function downloadXmlFromMemory(xml: string, filename: string) {
-  const blob = new Blob([xml], { type: 'application/xml' })
+function downloadBlobFromMemory(content: string, filename: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -153,4 +153,17 @@ export function downloadXmlFromMemory(xml: string, filename: string) {
   a.click()
   document.body.removeChild(a)
   URL.revokeObjectURL(url)
+}
+
+export function downloadXmlFromMemory(xml: string, filename: string) {
+  downloadBlobFromMemory(xml, filename, 'application/xml')
+}
+
+export function downloadJsonFromMemory(json: string, filename: string) {
+  downloadBlobFromMemory(json, filename, 'application/json')
+}
+
+/** "roster-sample.xml" → "roster-sample.json"; passes through unchanged if not ".xml". */
+export function jsonFilename(xmlFilename: string): string {
+  return /\.xml$/i.test(xmlFilename) ? xmlFilename.replace(/\.xml$/i, '.json') : `${xmlFilename}.json`
 }

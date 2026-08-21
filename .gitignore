@@ -12,3 +12,6 @@ data/fhir-samples/*.xml
 
 # TypeScript incremental build info
 *.tsbuildinfo
+
+# Local-only override for bind-mounting a sibling coco-canonical checkout during development
+docker-compose.override.yml
